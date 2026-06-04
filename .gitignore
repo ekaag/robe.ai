@@ -1,5 +1,7 @@
-robe.api/bin/Debug/*.*
+robe.api/bin/*.*
 robe.api/obj/*.*
+robe.library/bin/*.*
+robe.library/obj/*.*
 robe.library/obj/Debug/net8.0/robe.library.pdb
 robe.library/obj/Debug/net8.0/ref/robe.library.dll
 robe.library/obj/Debug/net8.0/refint/robe.library.dll
