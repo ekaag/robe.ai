@@ -1,0 +1,8 @@
+<Project>
+  <PropertyGroup>
+    <!-- Redirect build outputs to a central absolute folder. -->
+    <OutDir>C:\code\project-outputs\robe.ai\$(MSBuildProjectName)\$(Configuration)\</OutDir>
+    <!-- Optional: control publish output folder as well. -->
+    <PublishDir>C:\code\project-outputs\robe.ai\$(MSBuildProjectName)\publish\</PublishDir>
+  </PropertyGroup>
+</Project>
