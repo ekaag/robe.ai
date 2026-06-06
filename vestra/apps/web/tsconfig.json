@@ -1,0 +1,45 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "preserve",
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "ESNext"
+    ],
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@vestra/tokens": [
+        "../../packages/tokens/src/index.ts"
+      ],
+      "@vestra/types": [
+        "../../packages/types/src/index.ts"
+      ],
+      "@vestra/api": [
+        "../../packages/api/src/index.ts"
+      ],
+      "@vestra/auth": [
+        "../../packages/auth/src/index.ts"
+      ],
+      "@/*": [
+        "./*"
+      ]
+    },
+    "allowJs": true,
+    "incremental": true,
+    "isolatedModules": true
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}

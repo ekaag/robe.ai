@@ -1,0 +1,21 @@
+{
+  "name": "vestra",
+  "private": true,
+  "scripts": {
+    "build": "turbo build",
+    "dev": "turbo dev --parallel",
+    "typecheck": "turbo typecheck",
+    "lint": "turbo lint",
+    "gen:api": "openapi-typescript ../contracts/openapi.json -o packages/types/src/generated.ts && orval --config packages/api/orval.config.ts"
+  },
+  "devDependencies": {
+    "orval": "^7.3.0",
+    "openapi-typescript": "^7.4.0",
+    "turbo": "^2.3.3",
+    "typescript": "^5.5.3"
+  },
+  "packageManager": "pnpm@9.12.0",
+  "engines": {
+    "node": ">=20"
+  }
+}

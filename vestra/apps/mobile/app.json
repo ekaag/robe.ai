@@ -1,0 +1,24 @@
+{
+  "expo": {
+    "name": "Vestra",
+    "slug": "vestra",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "vestra",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "ai.robe.vestra"
+    },
+    "android": {
+      "package": "ai.robe.vestra",
+      "adaptiveIcon": {
+        "backgroundColor": "#ECE4D6"
+      }
+    },
+    "plugins": ["expo-router"],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

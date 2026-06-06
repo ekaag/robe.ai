@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-native",
+    "lib": ["ESNext"],
+    "paths": {
+      "@vestra/tokens": ["../../packages/tokens/src/index.ts"],
+      "@vestra/types": ["../../packages/types/src/index.ts"],
+      "@vestra/api": ["../../packages/api/src/index.ts"],
+      "@vestra/auth": ["../../packages/auth/src/index.ts"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx"],
+  "exclude": ["node_modules"]
+}

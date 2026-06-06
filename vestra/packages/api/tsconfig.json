@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "paths": {
+      "@vestra/types": ["../types/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "orval.config.ts"]
+}
