@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication;
 using Robe.Core.Interfaces;
 using Robe.Infrastructure.Auth;
 using Robe.Infrastructure.Persistence;
+using Robe.Infrastructure.Profile;
 using Robe.Infrastructure.Secrets;
 using Robe.Infrastructure.Storage;
 using Robe.Infrastructure.TraitsExtraction;
@@ -45,6 +46,8 @@ if (builder.Configuration.GetValue<bool>("UseLocalFakes"))
     builder.Services.AddScoped<ITraitsExtractor, FakeTraitsExtractor>();
     builder.Services.AddSingleton<IGarmentRepository, InMemoryGarmentRepository>();
     builder.Services.AddSingleton<IImageStore, InMemoryImageStore>();
+    builder.Services.AddScoped<IProfileGenerator, FakeProfileGenerator>();
+    builder.Services.AddSingleton<IProfileRepository, InMemoryProfileRepository>();
 }
 else
 {
@@ -52,6 +55,8 @@ else
     builder.Services.AddScoped<ITraitsExtractor, AzureOpenAITraitsExtractor>();
     builder.Services.AddScoped<IGarmentRepository, SqlGarmentRepository>();
     builder.Services.AddScoped<IImageStore, AzureBlobImageStore>();
+    builder.Services.AddScoped<IProfileGenerator, AzureOpenAIProfileGenerator>();
+    builder.Services.AddScoped<IProfileRepository, SqlProfileRepository>();
 }
 
 var app = builder.Build();
