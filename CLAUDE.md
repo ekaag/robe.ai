@@ -182,6 +182,39 @@ the clients automatically.
 
 ---
 
+## CORS (local dev + deployment)
+
+The web client runs on a different origin than the API (e.g. `localhost:3000`
+calling `localhost:5000`), so the API must send CORS headers or the browser
+blocks the call at preflight.
+
+```csharp
+builder.Services.AddCors(o => o.AddPolicy("default", p =>
+    p.WithOrigins(builder.Configuration.GetSection("Cors:Origins").Get<string[]>()
+        ?? new[] { "http://localhost:3000" })
+     .AllowAnyHeader()      // allows Authorization + Content-Type
+     .AllowAnyMethod()));   // covers GET/POST/DELETE + the OPTIONS preflight
+
+// pipeline ORDER MATTERS:
+app.UseRouting();
+app.UseCors("default");     // AFTER UseRouting, BEFORE auth
+app.UseAuthentication();
+app.UseAuthorization();
+```
+
+- **Order is the usual bug**: `UseCors` must precede `UseAuthentication`/
+  `UseAuthorization`. Because requests carry an `Authorization` header, the
+  browser sends an unauthenticated `OPTIONS` preflight first; if CORS runs after
+  auth, that preflight gets a 401 with no CORS headers → "No
+  'Access-Control-Allow-Origin'" error. CORS first lets the preflight resolve
+  before auth sees it.
+- Allowed origins come from **config** (`Cors:Origins`), not hardcoded — set the
+  web/app origins per environment.
+- Bearer tokens in a header don't need `AllowCredentials`. Only add it for
+  cookie-based auth, and then origins must be explicit (no `AllowAnyOrigin`).
+
+---
+
 ## Core data model: `GarmentTraits`
 
 This is the contract everything downstream keys off (profile, matching,
