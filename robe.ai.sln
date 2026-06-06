@@ -1,8 +1,14 @@
-Microsoft Visual Studio Solution File, Format Version 12.00
+﻿Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31913.202
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{F85E285D-4B0C-4D3D-8C3D-8B1B1D2C4B5D}") = "robe.api", "robe.api\robe.api.csproj", "{A1B2C3D4-E5F6-7A8B-9A0B-C1D2E3F4A5B6}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "robe.core", "robe.core\robe.core.csproj", "{5A04E992-5697-48F4-AFA9-046CE5DB1D78}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "robe.infrastructure", "robe.infrastructure\robe.infrastructure.csproj", "{EE554895-065E-4425-841D-C122A88C0B86}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "robe.api.tests", "robe.api.tests\robe.api.tests.csproj", "{F0365594-BDD2-4711-AA1E-E4E89AB96054}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -14,6 +20,18 @@ Global
 		{A1B2C3D4-E5F6-7A8B-9A0B-C1D2E3F4A5B6}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A1B2C3D4-E5F6-7A8B-9A0B-C1D2E3F4A5B6}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A1B2C3D4-E5F6-7A8B-9A0B-C1D2E3F4A5B6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5A04E992-5697-48F4-AFA9-046CE5DB1D78}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5A04E992-5697-48F4-AFA9-046CE5DB1D78}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5A04E992-5697-48F4-AFA9-046CE5DB1D78}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5A04E992-5697-48F4-AFA9-046CE5DB1D78}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EE554895-065E-4425-841D-C122A88C0B86}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EE554895-065E-4425-841D-C122A88C0B86}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EE554895-065E-4425-841D-C122A88C0B86}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EE554895-065E-4425-841D-C122A88C0B86}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F0365594-BDD2-4711-AA1E-E4E89AB96054}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F0365594-BDD2-4711-AA1E-E4E89AB96054}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F0365594-BDD2-4711-AA1E-E4E89AB96054}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F0365594-BDD2-4711-AA1E-E4E89AB96054}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

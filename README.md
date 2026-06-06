@@ -1,7 +1,7 @@
 # storagemarketplace
 
 ## Overview
-This project is a simple API application named `robe.api` designed to provide weather forecast data. It serves as a starting point for building a more comprehensive storage marketplace application.
+I am building an app/website that supports users to upload photos, extract clothes/garments from those photos to traits, save those into database, and match clothes combinations to wear from the data base based on a given event. I want you to help me build piece by piece of the design to code to production launch
 
 ## Project Structure
 The solution consists of the following components:
