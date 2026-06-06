@@ -50,6 +50,9 @@ for status.
   "Dependency model" section for the required interfaces per API.
 - Treat the `GarmentTraits` schema below as the source of truth. If you think it
   needs to change, propose the change and wait — do not silently diverge.
+- **Keep the OpenAPI spec current**: regenerate `contracts/openapi.json` whenever
+  an endpoint or DTO changes (see "API contract & OpenAPI"); the frontend codegens
+  from it.
 
 ---
 
@@ -142,6 +145,40 @@ Project layout: interfaces and domain types (`GarmentTraits`, `Garment`,
 references. Each concrete implementation lives in an **Infrastructure**
 project/folder and is the only place an SDK (Azure OpenAI client, EF Core, Blob
 SDK) is referenced. Controllers reference Core only.
+
+---
+
+## API contract & OpenAPI (single source of truth for the frontend)
+
+The backend is the contract owner. It emits an **OpenAPI document** that the
+frontend (`packages/types` and the API client in `FRONTEND.md`) generates from,
+so the DTOs are never hand-copied in two repos and can't silently drift.
+
+Backend:
+- Generate the spec from the running API. On **.NET 8** use **Swashbuckle**
+  (`Swashbuckle.AspNetCore`); on **.NET 9+** use the built-in
+  **`Microsoft.AspNetCore.OpenApi`** package. (Confirm which ships with your
+  template — this changed between versions.)
+- Expose it at `/openapi/v1.json` (or `/swagger/v1/swagger.json`) and also
+  **write it to a file** committed to the repo (e.g. `contracts/openapi.json`)
+  via a build step, so codegen doesn't require a running server.
+- Annotate DTOs and endpoints so the spec is accurate: explicit request/response
+  types, status codes (`[ProducesResponseType]` / typed results), required vs
+  nullable fields. The generated spec is only as good as these annotations.
+- **Working rule:** when an endpoint or DTO changes, regenerate
+  `contracts/openapi.json` in the same change — treat a stale spec as a bug.
+
+Frontend codegen (from `contracts/openapi.json`):
+- Types: **`openapi-typescript`** → feeds `packages/types`.
+- Client + TanStack Query hooks: **`orval`** (or `openapi-typescript-codegen`).
+- Microsoft-stack alternative: **Kiota** generates a typed client (incl. TS) and
+  fits if you prefer a Microsoft-maintained toolchain.
+- Wire codegen as an npm script (`pnpm gen:api`) so a contract bump is a
+  one-command refresh on the client side.
+
+Net effect: `GarmentTraits`, `Garment`, `StyleProfile`, `InventoryItem`,
+`RecommendationContext`, and `Recommendation` are authored once here and flow to
+the clients automatically.
 
 ---
 
