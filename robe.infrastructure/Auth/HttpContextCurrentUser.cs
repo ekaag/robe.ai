@@ -13,4 +13,7 @@ public class HttpContextCurrentUser : ICurrentUser
     public string UserId =>
         _accessor.HttpContext?.User.FindFirstValue(ClaimTypes.NameIdentifier)
         ?? throw new InvalidOperationException("No authenticated user in the current HTTP context.");
+
+    public string? Name     => _accessor.HttpContext?.User.FindFirstValue(ClaimTypes.Name);
+    public string? Provider => _accessor.HttpContext?.User.FindFirstValue("idp");
 }

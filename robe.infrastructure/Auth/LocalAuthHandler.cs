@@ -12,8 +12,10 @@ namespace Robe.Infrastructure.Auth;
 /// </summary>
 public class LocalAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions>
 {
-    public const string SchemeName = "Local";
-    public const string UserIdHeader = "X-User-Id";
+    public const string SchemeName      = "Local";
+    public const string UserIdHeader    = "X-User-Id";
+    public const string UserNameHeader  = "X-User-Name";
+    public const string ProviderHeader  = "X-User-Provider";
 
     public LocalAuthHandler(
         IOptionsMonitor<AuthenticationSchemeOptions> options,
@@ -30,10 +32,21 @@ public class LocalAuthHandler : AuthenticationHandler<AuthenticationSchemeOption
             return Task.FromResult(AuthenticateResult.NoResult());
         }
 
-        var userId = userIdValues.ToString();
-        var claims = new[] { new Claim(ClaimTypes.NameIdentifier, userId) };
+        var claims = new List<Claim>
+        {
+            new(ClaimTypes.NameIdentifier, userIdValues.ToString())
+        };
+
+        if (Request.Headers.TryGetValue(UserNameHeader, out var nameValues) &&
+            !string.IsNullOrWhiteSpace(nameValues.ToString()))
+            claims.Add(new Claim(ClaimTypes.Name, nameValues.ToString()));
+
+        if (Request.Headers.TryGetValue(ProviderHeader, out var providerValues) &&
+            !string.IsNullOrWhiteSpace(providerValues.ToString()))
+            claims.Add(new Claim("idp", providerValues.ToString()));
+
         var identity = new ClaimsIdentity(claims, Scheme.Name);
-        var ticket = new AuthenticationTicket(new ClaimsPrincipal(identity), Scheme.Name);
+        var ticket   = new AuthenticationTicket(new ClaimsPrincipal(identity), Scheme.Name);
         return Task.FromResult(AuthenticateResult.Success(ticket));
     }
 }

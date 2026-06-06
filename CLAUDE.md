@@ -285,6 +285,32 @@ keeping extraction and persistence decoupled.
 
 ---
 
+## Auth verification endpoint — `GET /api/me`
+
+A deliberately trivial, protected endpoint whose only job is to confirm a token
+is valid and reaches the backend. The frontend pings it during auth bring-up
+(FRONTEND.md step 1b) as the very first "the token works" check, before any real
+feature calls. No DB, no business logic.
+
+Requires a valid Entra (External ID / B2C) JWT.
+
+**Depends on (inject):** `ICurrentUser`
+
+**`GET /api/me`**
+```jsonc
+// response 200 — echoes identity derived from the validated token, not the request
+{ "userId": "usr_456", "name": "Sundeep A.", "provider": "apple" }
+```
+Pull `userId` from `ICurrentUser` (the token's subject claim); `name`/`provider`
+come from token claims if present. No request body, no params.
+
+Tests to show passing:
+- valid token → `200` with the caller's `userId`
+- missing/invalid/expired token → `401`
+- the `userId` matches the token subject (never anything client-supplied)
+
+---
+
 ## API #3 — Style profile generation
 
 Reads all of a user's stored garments, sends the aggregated traits to the model,
