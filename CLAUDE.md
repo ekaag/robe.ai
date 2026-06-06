@@ -8,15 +8,18 @@ wear or buy — eventually matching against multi-vendor inventory.
 
 ## Build order (one API at a time)
 
-1. **Garment trait extraction** — image in → structured traits out (no storage)
-2. **Storage + auth** — persist garments/images, map to authenticated user
-3. **Style profile generation** — analyze a user's garments → style profile
-4. Recommendation matching — profile + inventory → ranked matches
-5. Event-based suggestions — profile + event context → outfits / buy list
-6. Vendor inventory ingestion — 3rd-party APIs → per-merchant containers
-7. Vector search + filtering — semantic pre-filter before LLM ranking
+1. **Garment trait extraction** — image in → structured traits out (no storage)  ✅ DONE
+2. **Storage + auth** — persist garments/images, map to authenticated user  ✅ DONE
+3. **Style profile generation** — analyze a user's garments → style profile  ✅ DONE
+4. Recommendation matching — profile + inventory → ranked matches  ✅ DONE
+5. Event-based suggestions — profile + event context → outfits / buy list  ⬜ TODO
+6. Vendor inventory ingestion — 3rd-party APIs → per-merchant containers  ⬜ TODO
+7. Vector search + filtering — semantic pre-filter before LLM ranking  ⬜ TODO
 
-This file defines APIs 1–3 in detail. Do not build 4+ until those are done.
+APIs 1–4 are detailed below and built. APIs 5–7 have design notes (see "Planned
+APIs" near the end) but no full contracts yet — flesh out one before building it.
+When you finish an API, change its ⬜ to ✅ here so this stays the source of truth
+for status.
 
 ---
 
@@ -114,6 +117,24 @@ public interface IProfileRepository
     Task<StyleProfile?> GetAsync(string userId, CancellationToken ct = default);
 }
 // impls: SqlProfileRepository | CosmosProfileRepository | InMemoryProfileRepository
+
+// ---- API #4: recommendation matching ----
+public interface IInventoryRepository
+{
+    // candidate pool to match against; vendor-backed impls arrive in API #6
+    Task<IReadOnlyList<InventoryItem>> QueryAsync(InventoryQuery query, CancellationToken ct = default);
+}
+// impls: InMemoryInventoryRepository (seeded) | <vendor-backed, API #6>
+
+public interface IRecommender
+{
+    Task<IReadOnlyList<Recommendation>> RankAsync(
+        StyleProfile profile,
+        IReadOnlyCollection<InventoryItem> candidates,
+        RecommendationContext context,
+        CancellationToken ct = default);
+}
+// impls: AzureOpenAIRecommender | ClaudeRecommender | FakeRecommender
 ```
 
 Project layout: interfaces and domain types (`GarmentTraits`, `Garment`,
@@ -262,6 +283,114 @@ Tests to show passing:
 - user with zero garments → empty/“insufficient data” profile, not a 500
 - `GET` before any `generate` → `404` or empty state (decide and test it)
 - profile is scoped to the calling user only
+
+---
+
+## API #4 — Recommendation matching
+
+Takes the user's stored style profile plus a candidate pool of purchasable
+inventory, and returns ranked matches the user is likely to buy. The inventory
+pool is read through `IInventoryRepository` — for now back it with
+`InMemoryInventoryRepository` seeded with sample items, so this API is fully
+buildable and testable **before** the real vendor ingestion (API #6) exists.
+
+Requires a valid JWT; the profile and results are scoped to the caller.
+
+**Depends on (inject):** `IRecommender`, `IInventoryRepository`, `IProfileRepository`, `ICurrentUser`
+
+New domain types:
+```jsonc
+// InventoryItem — a purchasable garment in the candidate pool
+{
+  "id":        "inv_789",
+  "merchant":  "nordstrom",
+  "traits":    { /* GarmentTraits */ },     // reuse the same schema
+  "price":     { "amount": 49.0, "currency": "USD" },
+  "productUrl":"https://...",
+  "imageUrl":  "https://..."
+}
+
+// RecommendationContext — request-time inputs that shape ranking
+{
+  "budgetMax":   100.0,                       // optional
+  "categories":  ["top","outerwear"],         // optional filter
+  "excludeOwned": true                         // optional: skip items like ones they already have
+}
+
+// Recommendation — one ranked result
+{
+  "item":   { /* InventoryItem */ },
+  "score":  0.91,                              // 0–1 fit score
+  "reason": "Matches your minimalist, neutral palette; regular fit."
+}
+```
+
+**`POST /api/users/me/recommendations`**
+```jsonc
+// request  (body is a RecommendationContext; all fields optional)
+{ "budgetMax": 100.0, "categories": ["top"], "excludeOwned": true }
+// response 200
+{ "recommendations": [ { /* Recommendation */ }, ... ] }   // ranked, highest score first
+```
+
+Flow: load the caller's `StyleProfile` (via `IProfileRepository`) → query the
+candidate pool with the context filters (via `IInventoryRepository`) →
+pass profile + candidates + context to `IRecommender.RankAsync`. The ranker
+applies hard filters (budget, category) before scoring, then asks the model to
+score/justify fit. Keep the candidate set bounded — pre-filter before the model
+call (this is exactly the pre-filter that API #7's vector search will optimize
+later; for now a simple repository filter is fine).
+
+Tests to show passing (use `FakeRecommender`, `InMemoryInventoryRepository`, in-memory profile repo):
+- profile + seeded inventory → non-empty, score-ordered recommendations
+- `budgetMax` excludes over-budget items; `categories` filters correctly
+- user with no profile yet → `409` with a "generate a profile first" message
+- empty candidate pool → empty list, not a 500
+- results scoped to the calling user only
+
+---
+
+## Planned APIs (#5–#7) — design notes (not yet specced in full)
+
+Captured so context isn't lost. Before building one, expand it into a full
+section (contract + interfaces + tests) matching APIs 1–4, then flip its ⬜ to ✅.
+All follow the same interface-first rules and reuse existing domain types.
+
+### #5 — Event-based suggestions
+Same shape as API #4, with an added event context input. Caller describes an
+occasion ("outdoor summer wedding", "business conference"); system returns
+outfit suggestions from owned garments and/or things to buy from inventory.
+- Likely new input: `EventContext { description, formalityTarget, season, date? }`.
+- Reuses `StyleProfile`, the user's owned `Garment`s (`IGarmentRepository`), and
+  `IInventoryRepository`.
+- New interface likely `IOutfitSuggester` (impls: AzureOpenAI… | Claude… | Fake…),
+  returning suggested outfits (groupings of owned items) plus optional buy list.
+- Endpoint sketch: `POST /api/users/me/suggestions` with an `EventContext` body.
+
+### #6 — Vendor inventory ingestion
+The heavy lift — pulls inventory from third-party vendors (Amazon, Nordstrom,
+Macy's, etc.) into per-merchant containers, normalizes each item into
+`InventoryItem` (extracting `GarmentTraits` so it matches owned-garment data),
+and keeps it in sync. This is what finally backs `IInventoryRepository` with
+real data instead of the in-memory seed.
+- One `IVendorConnector` per merchant behind a common interface; a sync
+  job/`IInventorySyncService` writes normalized items to storage.
+- Concerns to plan for: auth per vendor, rate limits, scheduled refresh,
+  trait normalization across differing vendor schemas, dedupe.
+- Note: real vendor API access often needs affiliate/partner approval — confirm
+  availability before committing to a specific vendor.
+
+### #7 — Vector search + filtering
+Optimizes the candidate pre-filter that APIs #4/#5 currently do with simple
+repository filters. Embed the user's style profile and all inventory item traits
+into vectors, store them, and use semantic search to pull the top-N closest
+items before the LLM ranks them — so the model never sees thousands of items.
+- On Azure: **Azure AI Search** has built-in vector search (alternatives:
+  Pinecone, Weaviate, pgvector on Azure SQL/Postgres).
+- New interface likely `IVectorIndex` (upsert vectors, query top-N by similarity)
+  + an embedding step behind `IEmbedder`.
+- Slots in behind `IInventoryRepository.QueryAsync` (or as the thing that feeds
+  candidates to `IRecommender`) — controllers/rankers shouldn't need changes.
 
 ---
 
