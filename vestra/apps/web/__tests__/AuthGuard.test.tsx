@@ -26,7 +26,8 @@ describe("AuthGuard", () => {
     mockPathname.value = "/";
   });
 
-  it("renders children when the user is signed in", () => {
+  it("renders children when the user is signed in", async () => {
+    await auth.signIn("google");
     wrap(auth, <AuthGuard><div>Protected</div></AuthGuard>);
     expect(screen.getByText("Protected")).toBeInTheDocument();
   });
