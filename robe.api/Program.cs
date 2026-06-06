@@ -4,6 +4,7 @@ using Robe.Core.Interfaces;
 using Robe.Infrastructure.Auth;
 using Robe.Infrastructure.Persistence;
 using Robe.Infrastructure.Profile;
+using Robe.Infrastructure.Recommendations;
 using Robe.Infrastructure.Secrets;
 using Robe.Infrastructure.Storage;
 using Robe.Infrastructure.TraitsExtraction;
@@ -48,6 +49,8 @@ if (builder.Configuration.GetValue<bool>("UseLocalFakes"))
     builder.Services.AddSingleton<IImageStore, InMemoryImageStore>();
     builder.Services.AddScoped<IProfileGenerator, FakeProfileGenerator>();
     builder.Services.AddSingleton<IProfileRepository, InMemoryProfileRepository>();
+    builder.Services.AddScoped<IRecommender, FakeRecommender>();
+    builder.Services.AddSingleton<IInventoryRepository>(new InMemoryInventoryRepository());
 }
 else
 {
@@ -57,6 +60,8 @@ else
     builder.Services.AddScoped<IImageStore, AzureBlobImageStore>();
     builder.Services.AddScoped<IProfileGenerator, AzureOpenAIProfileGenerator>();
     builder.Services.AddScoped<IProfileRepository, SqlProfileRepository>();
+    builder.Services.AddScoped<IRecommender, AzureOpenAIRecommender>();
+    builder.Services.AddScoped<IInventoryRepository, SqlInventoryRepository>();
 }
 
 var app = builder.Build();
