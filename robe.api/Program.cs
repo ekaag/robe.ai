@@ -35,6 +35,21 @@ builder.Services.AddAuthentication(o =>
 
 builder.Services.AddAuthorization();
 
+var allowedOrigins = (builder.Configuration
+    .GetSection("Cors:AllowedOrigins")
+    .Get<string[]>() ?? Array.Empty<string>())
+    .Where(o => !string.IsNullOrWhiteSpace(o))
+    .ToArray();
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowConfiguredOrigins", policy =>
+    {
+        if (allowedOrigins.Length > 0)
+            policy.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod();
+    });
+});
+
 builder.Services.AddScoped<ICurrentUser, HttpContextCurrentUser>();
 
 if (builder.Configuration.GetValue<bool>("UseLocalFakes"))
@@ -72,6 +87,8 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseRouting();
+app.UseCors("AllowConfiguredOrigins");
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
