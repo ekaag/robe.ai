@@ -6,6 +6,7 @@
     "dev": "turbo dev --parallel",
     "typecheck": "turbo typecheck",
     "lint": "turbo lint",
+    "test": "turbo test",
     "gen:api": "openapi-typescript ../contracts/openapi.json -o packages/types/src/generated.ts && orval --config packages/api/orval.config.ts"
   },
   "devDependencies": {

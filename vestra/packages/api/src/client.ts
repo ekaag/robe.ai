@@ -35,7 +35,8 @@ export class ApiError extends Error {
 export class HttpApiClient implements IApiClient {
   constructor(
     private readonly baseUrl: string,
-    private readonly getToken: () => Promise<string | null>
+    private readonly getToken: () => Promise<string | null>,
+    private readonly onUnauthorized?: () => void
   ) {}
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -48,6 +49,10 @@ export class HttpApiClient implements IApiClient {
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
+    if (res.status === 401) {
+      this.onUnauthorized?.();
+      throw new ApiError(401, "Unauthorized");
+    }
     if (!res.ok) throw new ApiError(res.status, await res.text());
     if (res.status === 204) return undefined as T;
     return res.json() as Promise<T>;

@@ -9,9 +9,15 @@ monorepo, so design tokens, API client, types, and auth logic are written once.
 
 ## Build order (one feature at a time)
 
-0. **Scaffold** — monorepo, design tokens, shared types  ⬜
-1. **Auth + Sign-in** — Entra External ID via MSAL, all 4 providers, end-to-end
-   login → token → call a protected `/me` ping on both platforms  ⬜
+0. **Scaffold** — monorepo, design tokens, shared types  ✅
+1a. **Auth scaffolding** — `IAuthProvider` + `FakeAuthProvider`, sign-in screen
+    (4 ProviderButtons), api-client auth interceptor, session/route gating; all
+    tested against the fake. No real Entra. Buildable regardless of Entra setup.  ⬜
+1b. **Real Entra wiring** — `WebMsalAuthProvider` + `NativeMsalAuthProvider`,
+    configure the 4 providers in Entra, verify real login → token → protected
+    endpoint (`GET /api/me` or `/api/users/me/profile`) on web + mobile.
+    Prereq: live Entra External ID tenant + app registrations + provider creds
+    (you set these up in Entra + each provider's portal).  ⬜
 2. **Wardrobe + Garment detail** — list, upload, trait view (backend APIs 1–2)  ⬜
 3. **Style profile** — generate + view (backend API 3)  ⬜
 4. **Recommendations** — ranked shop list with filters (backend API 4)  ⬜

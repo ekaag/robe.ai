@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import "@fontsource/fraunces";
 import "@fontsource/hanken-grotesk";
 import { tokens } from "@vestra/tokens";
+import { Providers } from "../components/Providers";
+import { AuthGuard } from "../components/AuthGuard";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -9,7 +11,6 @@ export const metadata: Metadata = {
   description: "Your personal wardrobe stylist",
 };
 
-// Generate :root CSS variables from the tokens package (single source of truth).
 const colorVars = (Object.entries(tokens.color) as [string, string][])
   .map(([k, v]) => `--color-${k}:${v}`)
   .join(";");
@@ -26,7 +27,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* eslint-disable-next-line react/no-danger */}
         <style dangerouslySetInnerHTML={{ __html: rootCss }} />
       </head>
-      <body>{children}</body>
+      <body>
+        <Providers>
+          <AuthGuard>{children}</AuthGuard>
+        </Providers>
+      </body>
     </html>
   );
 }

@@ -7,8 +7,14 @@
   "exports": {
     ".": "./src/index.ts"
   },
+  "scripts": {
+    "test": "vitest run"
+  },
   "dependencies": {
     "@tanstack/react-query": "^5.59.0",
     "@vestra/types": "workspace:*"
+  },
+  "devDependencies": {
+    "vitest": "^1.6.0"
   }
 }
