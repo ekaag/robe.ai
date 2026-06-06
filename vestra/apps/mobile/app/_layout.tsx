@@ -1,11 +1,37 @@
-import { useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { useFonts } from "expo-font";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { tokens } from "@vestra/tokens";
-import { AuthContextProvider, FakeAuthProvider, useAuth } from "@vestra/auth";
+import { AuthContextProvider, FakeAuthProvider, useAuth, type IAuthProvider } from "@vestra/auth";
+import { ApiClientProvider, FakeApiClient, HttpApiClient, type IApiClient } from "@vestra/api";
+import { NativeMsalAuthProvider } from "../lib/auth/NativeMsalAuthProvider";
+import { readNativeEntraConfig } from "../lib/auth/nativeAuthConfig";
 
-// Replaced with NativeMsalAuthProvider in step 1b.
-const fakeAuth = new FakeAuthProvider();
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
+});
+
+type ReadyState = { auth: IAuthProvider; api: IApiClient };
+
+async function buildProviders(): Promise<ReadyState> {
+  const config = readNativeEntraConfig();
+  let auth: IAuthProvider;
+  if (config) {
+    const nativeAuth = new NativeMsalAuthProvider(config);
+    await nativeAuth.initialize();
+    auth = nativeAuth;
+  } else {
+    auth = new FakeAuthProvider();
+  }
+
+  const apiBase = process.env.EXPO_PUBLIC_API_BASE_URL;
+  const api: IApiClient = apiBase
+    ? new HttpApiClient(apiBase, () => auth.getAccessToken())
+    : new FakeApiClient();
+
+  return { auth, api };
+}
 
 function AuthGuard() {
   const auth = useAuth();
@@ -25,19 +51,28 @@ function AuthGuard() {
 }
 
 export default function RootLayout() {
-  const [loaded] = useFonts({});
+  const [fontsLoaded] = useFonts({});
+  const [ready, setReady] = useState<ReadyState | null>(null);
 
-  if (!loaded) return null;
+  useEffect(() => {
+    buildProviders().then(setReady);
+  }, []);
+
+  if (!fontsLoaded || !ready) return null;
 
   return (
-    <AuthContextProvider auth={fakeAuth}>
-      <AuthGuard />
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { backgroundColor: tokens.color.bg },
-        }}
-      />
-    </AuthContextProvider>
+    <QueryClientProvider client={queryClient}>
+      <ApiClientProvider client={ready.api}>
+        <AuthContextProvider auth={ready.auth}>
+          <AuthGuard />
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              contentStyle: { backgroundColor: tokens.color.bg },
+            }}
+          />
+        </AuthContextProvider>
+      </ApiClientProvider>
+    </QueryClientProvider>
   );
 }

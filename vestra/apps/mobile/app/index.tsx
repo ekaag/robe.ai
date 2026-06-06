@@ -1,12 +1,20 @@
 import { View, Text, StyleSheet } from "react-native";
+import { useQuery } from "@tanstack/react-query";
 import { tokens } from "@vestra/tokens";
+import { useApiClient } from "@vestra/api";
 
 export default function HomeScreen() {
+  const api = useApiClient();
+  const { data: me } = useQuery({
+    queryKey: ["me"],
+    queryFn: () => api.getMe(),
+  });
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Vestra</Text>
       <Text style={styles.subtitle}>
-        Scaffold complete — sign-in and screens coming in step 1.
+        {me ? `Signed in as ${me.userId} via ${me.provider}.` : "Verifying session…"}
       </Text>
     </View>
   );

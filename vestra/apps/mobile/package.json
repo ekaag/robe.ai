@@ -7,7 +7,8 @@
     "dev": "expo start",
     "ios": "expo run:ios",
     "android": "expo run:android",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@expo-google-fonts/fraunces": "^0.3.0",
@@ -18,9 +19,12 @@
     "@vestra/tokens": "workspace:*",
     "@vestra/types": "workspace:*",
     "expo": "~51.0.0",
+    "expo-auth-session": "~5.5.0",
     "expo-font": "~12.0.0",
     "expo-router": "~3.5.0",
+    "expo-secure-store": "~13.0.0",
     "expo-status-bar": "~1.12.0",
+    "expo-web-browser": "~13.0.0",
     "react": "18.2.0",
     "react-native": "0.74.0"
   },
@@ -28,6 +32,7 @@
     "@babel/core": "^7.25.0",
     "@types/react": "~18.2.0",
     "babel-preset-expo": "~11.0.0",
-    "typescript": "^5.5.3"
+    "typescript": "^5.5.3",
+    "vitest": "^1.6.0"
   }
 }

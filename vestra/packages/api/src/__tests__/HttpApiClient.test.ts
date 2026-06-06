@@ -61,6 +61,12 @@ describe("HttpApiClient", () => {
 describe("FakeApiClient", () => {
   const client = new FakeApiClient();
 
+  it("getMe returns fake user", async () => {
+    const me = await client.getMe();
+    expect(me.userId).toBe("usr_fake");
+    expect(me.provider).toBe("google");
+  });
+
   it("listGarments returns seeded fixture", async () => {
     const garments = await client.listGarments();
     expect(garments).toHaveLength(1);

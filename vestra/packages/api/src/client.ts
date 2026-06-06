@@ -12,9 +12,11 @@ import type {
   StyleTag,
   GarmentFit,
   Season,
+  MeUser,
 } from "@vestra/types";
 
 export interface IApiClient {
+  getMe(): Promise<MeUser>;
   analyzeGarment(image: ImageInput): Promise<GarmentTraits>;
   addGarment(input: AddGarmentInput): Promise<Garment>;
   listGarments(q?: GarmentQuery): Promise<Garment[]>;
@@ -65,6 +67,10 @@ export class HttpApiClient implements IApiClient {
       if (e instanceof ApiError && e.status === 404) return null;
       throw e;
     }
+  }
+
+  getMe(): Promise<MeUser> {
+    return this.request("GET", "/api/me");
   }
 
   async analyzeGarment(image: ImageInput): Promise<GarmentTraits> {
@@ -168,6 +174,10 @@ const fakeRecommendations: Recommendation[] = [
 ];
 
 export class FakeApiClient implements IApiClient {
+  async getMe(): Promise<MeUser> {
+    return { userId: "usr_fake", name: "Dev User", provider: "google" };
+  }
+
   async analyzeGarment(_image: ImageInput): Promise<GarmentTraits> {
     return fakeTraits;
   }

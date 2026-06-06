@@ -117,3 +117,11 @@ export interface Recommendation {
   score: number;    // 0–1 fit score
   reason: string;
 }
+
+// ---- Auth / Me ----
+
+export interface MeUser {
+  userId: string;
+  name?: string;
+  provider: string;
+}
