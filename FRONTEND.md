@@ -12,7 +12,7 @@ monorepo, so design tokens, API client, types, and auth logic are written once.
 0. **Scaffold** — monorepo, design tokens, shared types  ✅
 1a. **Auth scaffolding** — `IAuthProvider` + `FakeAuthProvider`, sign-in screen
     (4 ProviderButtons), api-client auth interceptor, session/route gating; all
-    tested against the fake. No real Entra. Buildable regardless of Entra setup.  ⬜
+    tested against the fake. No real Entra. Buildable regardless of Entra setup.  ✅
 1b. **Real Entra wiring** — `WebMsalAuthProvider` + `NativeMsalAuthProvider`,
     configure the 4 providers in Entra, verify real login → token → protected
     endpoint (`GET /api/me` or `/api/users/me/profile`) on web + mobile.
