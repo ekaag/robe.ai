@@ -84,13 +84,14 @@ export class HttpApiClient implements IApiClient {
     return this.request("POST", "/api/garments", input);
   }
 
-  listGarments(q?: GarmentQuery): Promise<Garment[]> {
+  async listGarments(q?: GarmentQuery): Promise<Garment[]> {
     const params = new URLSearchParams();
     if (q?.category) params.set("category", q.category);
     if (q?.page != null) params.set("page", String(q.page));
     if (q?.pageSize != null) params.set("pageSize", String(q.pageSize));
     const qs = params.size > 0 ? `?${params}` : "";
-    return this.request("GET", `/api/garments${qs}`);
+    const res = await this.request<{ items: Garment[] }>("GET", `/api/garments${qs}`);
+    return res.items;
   }
 
   getGarment(id: string): Promise<Garment> {

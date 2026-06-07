@@ -13,6 +13,7 @@ using Robe.Infrastructure.TraitsExtraction;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: false);
+var useLocalFakes = builder.Configuration.GetValue<bool>("UseLocalFakes");
 
 builder.Services.AddControllers()
     .AddJsonOptions(o =>
@@ -30,7 +31,7 @@ builder.Services.AddHttpContextAccessor();
 var entraAuthority = builder.Configuration["Entra:Authority"];
 var entraClientId  = builder.Configuration["Entra:ClientId"];
 
-if (!string.IsNullOrEmpty(entraAuthority) && !string.IsNullOrEmpty(entraClientId))
+if (!useLocalFakes && !string.IsNullOrEmpty(entraAuthority) && !string.IsNullOrEmpty(entraClientId))
 {
     // Validates the ID token the frontend sends as the Bearer credential.
     // Audience = client ID because CIAM ID tokens carry aud = client_id.
@@ -98,7 +99,7 @@ builder.Services.AddCors(options =>
 
 builder.Services.AddScoped<ICurrentUser, HttpContextCurrentUser>();
 
-if (builder.Configuration.GetValue<bool>("UseLocalFakes"))
+if (useLocalFakes)
 {
     var secrets = builder.Configuration
         .GetSection("LocalSecrets")
@@ -150,7 +151,10 @@ app.Use(async (context, next) =>
         {
             context.Response.StatusCode  = StatusCodes.Status500InternalServerError;
             context.Response.ContentType = "application/json";
-            await context.Response.WriteAsJsonAsync(new { error = "Internal server error." });
+            var isDev = context.RequestServices.GetRequiredService<IWebHostEnvironment>().IsDevelopment();
+            await context.Response.WriteAsJsonAsync(isDev
+                ? new { error = ex.GetType().Name, detail = ex.Message, stack = ex.StackTrace }
+                : (object)new { error = "Internal server error." });
         }
     }
 });

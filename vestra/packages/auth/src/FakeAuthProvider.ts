@@ -1,10 +1,10 @@
 import type { IAuthProvider, AuthProvider, CurrentUser } from "./types";
 
 export class FakeAuthProvider implements IAuthProvider {
-  currentUser: CurrentUser | null = null;
+  currentUser: CurrentUser | null = { id: "dev-user", name: "Dev User", provider: "google" };
 
   async signIn(provider: AuthProvider): Promise<void> {
-    this.currentUser = { id: "usr_fake", name: "Dev User", provider };
+    this.currentUser = { id: "dev-user", name: "Dev User", provider };
   }
 
   async signOut(): Promise<void> {
