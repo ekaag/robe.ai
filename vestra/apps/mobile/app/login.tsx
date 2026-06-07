@@ -18,7 +18,7 @@ export default function LoginScreen() {
 
   const handleSignIn = async (provider: AuthProvider) => {
     await auth.signIn(provider);
-    router.replace("/");
+    router.replace("/wardrobe");
   };
 
   return (

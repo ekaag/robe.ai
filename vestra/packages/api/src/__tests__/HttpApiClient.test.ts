@@ -67,10 +67,30 @@ describe("FakeApiClient", () => {
     expect(me.provider).toBe("google");
   });
 
-  it("listGarments returns seeded fixture", async () => {
+  it("listGarments returns all seeded fixtures", async () => {
     const garments = await client.listGarments();
-    expect(garments).toHaveLength(1);
+    expect(garments).toHaveLength(3);
     expect(garments[0].id).toBe("grm_001");
+  });
+
+  it("listGarments filters by category", async () => {
+    const tops = await client.listGarments({ category: "top" });
+    expect(tops).toHaveLength(1);
+    expect(tops[0].traits.category).toBe("top");
+
+    const bottoms = await client.listGarments({ category: "bottom" });
+    expect(bottoms).toHaveLength(1);
+    expect(bottoms[0].traits.category).toBe("bottom");
+  });
+
+  it("getGarment returns correct garment by id", async () => {
+    const g = await client.getGarment("grm_002");
+    expect(g.id).toBe("grm_002");
+    expect(g.traits.category).toBe("bottom");
+  });
+
+  it("getGarment throws 404 for unknown id", async () => {
+    await expect(client.getGarment("grm_unknown")).rejects.toMatchObject({ status: 404 });
   });
 
   it("getProfile returns seeded style profile", async () => {

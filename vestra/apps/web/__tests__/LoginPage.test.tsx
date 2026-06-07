@@ -40,7 +40,7 @@ describe("LoginPage", () => {
     renderLoginPage(auth);
     fireEvent.click(screen.getByText(/continue with google/i));
     await waitFor(() => expect(signInSpy).toHaveBeenCalledWith("google"));
-    expect(mockPush).toHaveBeenCalledWith("/");
+    expect(mockPush).toHaveBeenCalledWith("/wardrobe");
   });
 
   it("clicking Apple calls signIn('apple') then navigates home", async () => {
@@ -48,6 +48,6 @@ describe("LoginPage", () => {
     renderLoginPage(auth);
     fireEvent.click(screen.getByText(/continue with apple/i));
     await waitFor(() => expect(signInSpy).toHaveBeenCalledWith("apple"));
-    expect(mockPush).toHaveBeenCalledWith("/");
+    expect(mockPush).toHaveBeenCalledWith("/wardrobe");
   });
 });

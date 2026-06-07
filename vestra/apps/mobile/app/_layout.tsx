@@ -43,7 +43,7 @@ function AuthGuard() {
     if (!auth.currentUser && !onLoginScreen) {
       router.replace("/login");
     } else if (auth.currentUser && onLoginScreen) {
-      router.replace("/");
+      router.replace("/wardrobe");
     }
   }, [auth.currentUser, segments, router]);
 

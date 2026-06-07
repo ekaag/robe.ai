@@ -18,7 +18,7 @@ export default function LoginPage() {
 
   const handleSignIn = async (provider: AuthProvider) => {
     await auth.signIn(provider);
-    router.push("/");
+    router.push("/wardrobe");
   };
 
   return (

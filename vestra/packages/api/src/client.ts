@@ -142,6 +142,50 @@ const fakeGarment: Garment = {
   createdAt: "2026-01-01T00:00:00Z",
 };
 
+const fakeGarment2: Garment = {
+  id: "grm_002",
+  userId: "usr_fake",
+  traits: {
+    category: "bottom",
+    subcategory: "jeans",
+    primaryColor: { name: "indigo", hex: "#3b3f6e" },
+    secondaryColors: [],
+    pattern: "solid",
+    material: "denim",
+    fit: "slim",
+    formality: 1,
+    seasonality: ["spring", "summer", "fall", "winter"],
+    styleTags: ["casual", "classic"],
+    occasions: ["everyday", "weekend"],
+    confidence: 0.88,
+  },
+  imageUrl: "https://placehold.co/300x400/E2D7C4/221C15?text=Jeans",
+  createdAt: "2026-01-02T00:00:00Z",
+};
+
+const fakeGarment3: Garment = {
+  id: "grm_003",
+  userId: "usr_fake",
+  traits: {
+    category: "outerwear",
+    subcategory: "jacket",
+    primaryColor: { name: "tan", hex: "#c4a882" },
+    secondaryColors: [],
+    pattern: "solid",
+    material: "wool",
+    fit: "regular",
+    formality: 3,
+    seasonality: ["fall", "winter"],
+    styleTags: ["classic", "minimalist"],
+    occasions: ["everyday", "work"],
+    confidence: 0.85,
+  },
+  imageUrl: "https://placehold.co/300x400/FBF8F1/221C15?text=Jacket",
+  createdAt: "2026-01-03T00:00:00Z",
+};
+
+const fakeGarments: Garment[] = [fakeGarment, fakeGarment2, fakeGarment3];
+
 const fakeProfile: StyleProfile = {
   dominantStyles: ["minimalist", "classic"] as StyleTag[],
   colorPalette: [
@@ -184,11 +228,14 @@ export class FakeApiClient implements IApiClient {
   async addGarment(input: AddGarmentInput): Promise<Garment> {
     return { ...fakeGarment, traits: input.traits, id: `grm_${Date.now()}` };
   }
-  async listGarments(_q?: GarmentQuery): Promise<Garment[]> {
-    return [fakeGarment];
+  async listGarments(q?: GarmentQuery): Promise<Garment[]> {
+    if (q?.category) return fakeGarments.filter((g) => g.traits.category === q.category);
+    return fakeGarments;
   }
-  async getGarment(_id: string): Promise<Garment> {
-    return fakeGarment;
+  async getGarment(id: string): Promise<Garment> {
+    const found = fakeGarments.find((g) => g.id === id);
+    if (!found) throw new ApiError(404, `Garment ${id} not found`);
+    return found;
   }
   async deleteGarment(_id: string): Promise<void> {}
   async generateProfile(): Promise<StyleProfile> {
