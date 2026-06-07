@@ -48,6 +48,21 @@ if (!string.IsNullOrEmpty(entraAuthority) && !string.IsNullOrEmpty(entraClientId
             {
                 ValidateIssuer = false,
             };
+            options.Events = new Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerEvents
+            {
+                OnAuthenticationFailed = ctx =>
+                {
+                    Console.Error.WriteLine(
+                        $"[JWT] Auth failed — {ctx.Exception.GetType().Name}: {ctx.Exception.Message}");
+                    return Task.CompletedTask;
+                },
+                OnTokenValidated = ctx =>
+                {
+                    var oid = ctx.Principal?.FindFirst("oid")?.Value ?? "(no oid)";
+                    Console.Error.WriteLine($"[JWT] Token validated OK, oid={oid}");
+                    return Task.CompletedTask;
+                },
+            };
         });
 }
 else

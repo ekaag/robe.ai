@@ -8,7 +8,8 @@ namespace Robe.Infrastructure.Auth;
 
 /// <summary>
 /// Header-based auth for local dev and tests. Replace with JWT bearer for production.
-/// Send X-User-Id: &lt;userId&gt; to authenticate; omit the header to get a 401.
+/// Send X-User-Id: &lt;userId&gt; to authenticate as a specific user.
+/// Omit the header to authenticate as the default "dev-user" identity.
 /// </summary>
 public class LocalAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions>
 {
@@ -24,17 +25,18 @@ public class LocalAuthHandler : AuthenticationHandler<AuthenticationSchemeOption
         ISystemClock clock)
         : base(options, logger, encoder, clock) { }
 
+    public const string DefaultDevUserId = "dev-user";
+
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
-        if (!Request.Headers.TryGetValue(UserIdHeader, out var userIdValues) ||
-            string.IsNullOrWhiteSpace(userIdValues.ToString()))
-        {
-            return Task.FromResult(AuthenticateResult.NoResult());
-        }
+        var userId = Request.Headers.TryGetValue(UserIdHeader, out var userIdValues) &&
+                     !string.IsNullOrWhiteSpace(userIdValues.ToString())
+            ? userIdValues.ToString()
+            : DefaultDevUserId;
 
         var claims = new List<Claim>
         {
-            new(ClaimTypes.NameIdentifier, userIdValues.ToString())
+            new(ClaimTypes.NameIdentifier, userId)
         };
 
         if (Request.Headers.TryGetValue(UserNameHeader, out var nameValues) &&
