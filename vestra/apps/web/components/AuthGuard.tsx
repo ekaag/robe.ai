@@ -9,14 +9,16 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
 
+  const isPublic = pathname === "/login" || pathname === "/auth/blank";
+
   useEffect(() => {
-    if (!auth.currentUser && pathname !== "/login") {
+    if (!auth.currentUser && !isPublic) {
       router.replace("/login");
     }
-  }, [auth.currentUser, pathname, router]);
+  }, [auth.currentUser, isPublic, router]);
 
   // Suppress protected content on the client until auth is confirmed.
-  if (!auth.currentUser && pathname !== "/login") return null;
+  if (!auth.currentUser && !isPublic) return null;
 
   return <>{children}</>;
 }

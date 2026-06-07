@@ -51,10 +51,15 @@ export class WebMsalAuthProvider implements IAuthProvider {
     }
   }
 
+  private get blankRedirectUri(): string {
+    return window.location.origin + "/auth/blank";
+  }
+
   async signIn(provider: AuthProvider): Promise<void> {
     const domainHint = DOMAIN_HINTS[provider];
     const result = await this.pca.loginPopup({
       scopes: [this.apiScope, "openid", "profile"],
+      redirectUri: this.blankRedirectUri,
       ...(domainHint ? { domainHint } : {}),
     });
     this.pca.setActiveAccount(result.account);
@@ -63,7 +68,10 @@ export class WebMsalAuthProvider implements IAuthProvider {
 
   async signOut(): Promise<void> {
     const account = this.pca.getActiveAccount();
-    await this.pca.logoutPopup(account ? { account } : undefined);
+    await this.pca.logoutPopup({
+      ...(account ? { account } : {}),
+      postLogoutRedirectUri: this.blankRedirectUri,
+    });
     this.currentUser = null;
   }
 
@@ -81,6 +89,7 @@ export class WebMsalAuthProvider implements IAuthProvider {
         const result = await this.pca.acquireTokenPopup({
           account,
           scopes: [this.apiScope],
+          redirectUri: this.blankRedirectUri,
         });
         return result.accessToken;
       }
