@@ -34,11 +34,9 @@ function inferProvider(account: AccountInfo): AuthProvider {
 export class WebMsalAuthProvider implements IAuthProvider {
   currentUser: CurrentUser | null = null;
   private readonly pca: PublicClientApplication;
-  private readonly apiScope: string;
 
   constructor(config: EntraConfig) {
     this.pca = new PublicClientApplication(buildMsalConfig(config));
-    this.apiScope = config.apiScope;
   }
 
   async initialize(): Promise<void> {
@@ -55,18 +53,21 @@ export class WebMsalAuthProvider implements IAuthProvider {
     return window.location.origin + "/auth/blank";
   }
 
+  // Entra External ID (CIAM) won't issue access tokens for api:// scoped
+  // resources to Google-federated accounts (AADSTS500207). ID tokens always
+  // work for social sign-in and serve as the bearer credential for the backend.
+  private _cachedIdToken: string | null = null;
+
   async signIn(provider: AuthProvider): Promise<void> {
     const domainHint = DOMAIN_HINTS[provider];
-    // Entra External ID (CIAM) requires OIDC scopes and API scopes to be
-    // requested separately — mixing them in loginPopup causes AADSTS500011.
-    // The API access token is acquired on demand in getAccessToken().
     const result = await this.pca.loginPopup({
-      scopes: ["openid", "profile", "offline_access"],
+      scopes: ["openid", "offline_access"],
       redirectUri: this.blankRedirectUri,
       ...(domainHint ? { domainHint } : {}),
     });
     this.pca.setActiveAccount(result.account);
     this.currentUser = accountToUser(result.account, provider);
+    this._cachedIdToken = result.idToken;
   }
 
   async signOut(): Promise<void> {
@@ -76,6 +77,7 @@ export class WebMsalAuthProvider implements IAuthProvider {
       postLogoutRedirectUri: this.blankRedirectUri,
     });
     this.currentUser = null;
+    this._cachedIdToken = null;
   }
 
   async getAccessToken(): Promise<string | null> {
@@ -84,19 +86,21 @@ export class WebMsalAuthProvider implements IAuthProvider {
     try {
       const result = await this.pca.acquireTokenSilent({
         account,
-        scopes: [this.apiScope],
+        scopes: ["openid"],
       });
-      return result.accessToken;
+      this._cachedIdToken = result.idToken;
+      return result.idToken;
     } catch (e) {
       if (e instanceof InteractionRequiredAuthError) {
         const result = await this.pca.acquireTokenPopup({
           account,
-          scopes: [this.apiScope],
+          scopes: ["openid"],
           redirectUri: this.blankRedirectUri,
         });
-        return result.accessToken;
+        this._cachedIdToken = result.idToken;
+        return result.idToken;
       }
-      return null;
+      return this._cachedIdToken;
     }
   }
 }

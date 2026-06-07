@@ -24,14 +24,32 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddHttpContextAccessor();
 
-// Auth — LocalAuthHandler reads X-User-Id header for local dev and tests.
-// Replace AddScheme with .AddJwtBearer(...) and configure Entra External ID for production.
-builder.Services.AddAuthentication(o =>
+// Auth — JWT Bearer when Entra config is present; LocalAuthHandler (X-User-Id header)
+// for local dev and integration tests that don't need real tokens.
+var entraAuthority = builder.Configuration["Entra:Authority"];
+var entraClientId  = builder.Configuration["Entra:ClientId"];
+
+if (!string.IsNullOrEmpty(entraAuthority) && !string.IsNullOrEmpty(entraClientId))
 {
-    o.DefaultAuthenticateScheme = LocalAuthHandler.SchemeName;
-    o.DefaultChallengeScheme = LocalAuthHandler.SchemeName;
-})
-.AddScheme<AuthenticationSchemeOptions, LocalAuthHandler>(LocalAuthHandler.SchemeName, _ => { });
+    // Validates the ID token the frontend sends as the Bearer credential.
+    // Audience = client ID because CIAM ID tokens carry aud = client_id.
+    builder.Services.AddAuthentication("Bearer")
+        .AddJwtBearer(options =>
+        {
+            options.Authority = entraAuthority;
+            options.Audience  = entraClientId;
+            options.MapInboundClaims = false; // keep raw claim names (sub, oid, name)
+        });
+}
+else
+{
+    builder.Services.AddAuthentication(o =>
+    {
+        o.DefaultAuthenticateScheme = LocalAuthHandler.SchemeName;
+        o.DefaultChallengeScheme    = LocalAuthHandler.SchemeName;
+    })
+    .AddScheme<AuthenticationSchemeOptions, LocalAuthHandler>(LocalAuthHandler.SchemeName, _ => { });
+}
 
 builder.Services.AddAuthorization();
 
