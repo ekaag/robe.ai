@@ -55,7 +55,9 @@ builder.Services.AddAuthorization();
 
 var allowedOrigins = (builder.Configuration
     .GetSection("Cors:AllowedOrigins")
-    .Get<string[]>() ?? Array.Empty<string>())
+    .Get<string[]>()
+    ?? builder.Configuration.GetSection("Cors:Origins").Get<string[]>()
+    ?? Array.Empty<string>())
     .Where(o => !string.IsNullOrWhiteSpace(o))
     .ToArray();
 
