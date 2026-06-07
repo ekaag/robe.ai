@@ -57,8 +57,11 @@ export class WebMsalAuthProvider implements IAuthProvider {
 
   async signIn(provider: AuthProvider): Promise<void> {
     const domainHint = DOMAIN_HINTS[provider];
+    // Entra External ID (CIAM) requires OIDC scopes and API scopes to be
+    // requested separately — mixing them in loginPopup causes AADSTS500011.
+    // The API access token is acquired on demand in getAccessToken().
     const result = await this.pca.loginPopup({
-      scopes: [this.apiScope, "openid", "profile"],
+      scopes: ["openid", "profile", "offline_access"],
       redirectUri: this.blankRedirectUri,
       ...(domainHint ? { domainHint } : {}),
     });
