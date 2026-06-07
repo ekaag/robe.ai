@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.IdentityModel.Tokens;
 using Robe.Core.Interfaces;
 using Robe.Infrastructure.Auth;
 using Robe.Infrastructure.Persistence;
@@ -33,12 +34,20 @@ if (!string.IsNullOrEmpty(entraAuthority) && !string.IsNullOrEmpty(entraClientId
 {
     // Validates the ID token the frontend sends as the Bearer credential.
     // Audience = client ID because CIAM ID tokens carry aud = client_id.
+    // ValidateIssuer = false: CIAM's friendly-URL authority
+    // (vestraoauth.ciamlogin.com) reports a different issuer in its discovery
+    // document (ed1aa306-…ciamlogin.com) than the iss claim in tokens it issues.
+    // Signature + audience + expiry validation still applies.
     builder.Services.AddAuthentication("Bearer")
         .AddJwtBearer(options =>
         {
             options.Authority = entraAuthority;
             options.Audience  = entraClientId;
             options.MapInboundClaims = false; // keep raw claim names (sub, oid, name)
+            options.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuer = false,
+            };
         });
 }
 else
@@ -111,6 +120,26 @@ if (app.Environment.IsDevelopment())
 
 app.UseRouting();
 app.UseCors("AllowConfiguredOrigins");
+
+// Catch unhandled exceptions here (after CORS) so error responses still carry
+// Access-Control-Allow-Origin — prevents the browser from misreporting server
+// errors as CORS failures.
+app.Use(async (context, next) =>
+{
+    try { await next(context); }
+    catch (Exception ex)
+    {
+        var log = context.RequestServices.GetRequiredService<ILogger<Program>>();
+        log.LogError(ex, "Unhandled exception for {Method} {Path}", context.Request.Method, context.Request.Path);
+        if (!context.Response.HasStarted)
+        {
+            context.Response.StatusCode  = StatusCodes.Status500InternalServerError;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsJsonAsync(new { error = "Internal server error." });
+        }
+    }
+});
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
