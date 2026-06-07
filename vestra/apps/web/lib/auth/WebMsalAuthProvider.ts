@@ -16,11 +16,24 @@ const DOMAIN_HINTS: Partial<Record<AuthProvider, string>> = {
 };
 
 function accountToUser(account: AccountInfo, provider: AuthProvider): CurrentUser {
-  return {
-    id: account.homeAccountId,
-    name: account.name ?? account.username,
-    provider,
-  };
+  const c = account.idTokenClaims as Record<string, unknown> | undefined;
+
+  // oid is the stable Entra object ID — matches what the backend extracts from the JWT.
+  const id = (c?.["oid"] as string | undefined) ?? account.homeAccountId;
+
+  // CIAM user flows don't always populate account.name; try several claim sources.
+  const given  = c?.["given_name"] as string | undefined;
+  const family = c?.["family_name"] as string | undefined;
+  const full   = given && family ? `${given} ${family}` : given ?? family;
+  const name   =
+    account.name?.trim() ||
+    (c?.["name"] as string | undefined)?.trim() ||
+    full?.trim() ||
+    (c?.["email"] as string | undefined) ||
+    account.username ||
+    undefined;
+
+  return { id, name, provider };
 }
 
 function inferProvider(account: AccountInfo): AuthProvider {
