@@ -8,7 +8,7 @@ public class FakeTraitsExtractor : ITraitsExtractor
     private readonly GarmentTraits? _traits;
     private readonly Exception? _exception;
 
-    private FakeTraitsExtractor() { }
+    public FakeTraitsExtractor() { }
     private FakeTraitsExtractor(GarmentTraits traits) => _traits = traits;
     private FakeTraitsExtractor(Exception exception) => _exception = exception;
 
