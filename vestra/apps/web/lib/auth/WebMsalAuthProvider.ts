@@ -22,15 +22,19 @@ function accountToUser(account: AccountInfo, provider: AuthProvider): CurrentUse
   const id = (c?.["oid"] as string | undefined) ?? account.homeAccountId;
 
   // CIAM user flows don't always populate account.name; try several claim sources.
+  // preferred_username / email are most reliable for Google-federated CIAM accounts.
   const given  = c?.["given_name"] as string | undefined;
   const family = c?.["family_name"] as string | undefined;
   const full   = given && family ? `${given} ${family}` : given ?? family;
-  const name   =
-    account.name?.trim() ||
-    (c?.["name"] as string | undefined)?.trim() ||
-    full?.trim() ||
+  const email  =
     (c?.["email"] as string | undefined) ||
-    account.username ||
+    (c?.["preferred_username"] as string | undefined) ||
+    (account.username?.includes("@") ? account.username : undefined);
+  const name   =
+    full?.trim() ||
+    (c?.["name"] as string | undefined)?.trim() ||
+    account.name?.trim() ||
+    email ||
     undefined;
 
   return { id, name, provider };

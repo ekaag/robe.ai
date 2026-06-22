@@ -101,7 +101,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   whiteSpace: "nowrap",
                 }}
               >
-                {auth.currentUser.name ?? auth.currentUser.id}
+                {auth.currentUser.name ??
+                  `${auth.currentUser.provider.charAt(0).toUpperCase()}${auth.currentUser.provider.slice(1)} Account`}
               </div>
               <div style={{ fontSize: "0.75rem", color: "var(--color-muted)", textTransform: "capitalize" }}>
                 {auth.currentUser.provider}
