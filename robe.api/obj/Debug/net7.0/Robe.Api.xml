@@ -1,0 +1,91 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>Robe.Api</name>
+    </assembly>
+    <members>
+        <member name="T:Robe.Api.Controllers.GarmentsController">
+            <summary>
+            Garment analysis, storage, and retrieval.
+            </summary>
+        </member>
+        <member name="M:Robe.Api.Controllers.GarmentsController.Analyze(Robe.Api.Controllers.AnalyzeRequest,System.Threading.CancellationToken)">
+            <summary>
+            Analyze a garment image and extract structured traits.
+            </summary>
+            <remarks>
+            Stateless — sends the image to a vision model and returns extracted traits.
+            No authentication required. No data is persisted.
+            </remarks>
+        </member>
+        <member name="M:Robe.Api.Controllers.GarmentsController.Create(Robe.Api.Controllers.CreateGarmentRequest,System.Threading.CancellationToken)">
+            <summary>
+            Store a new garment with its image and extracted traits.
+            </summary>
+        </member>
+        <member name="M:Robe.Api.Controllers.GarmentsController.List(System.Nullable{Robe.Core.Domain.GarmentCategory},System.Int32,System.Int32,System.Threading.CancellationToken)">
+            <summary>
+            List the current user's garments with optional category filter and paging.
+            </summary>
+        </member>
+        <member name="M:Robe.Api.Controllers.GarmentsController.GetById(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Get a single garment by ID (must belong to the current user).
+            </summary>
+        </member>
+        <member name="M:Robe.Api.Controllers.GarmentsController.Delete(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Delete a garment and its stored image (must belong to the current user).
+            </summary>
+        </member>
+        <member name="T:Robe.Api.Controllers.HomeController">
+            <summary>
+            Health check.
+            </summary>
+        </member>
+        <member name="M:Robe.Api.Controllers.HomeController.Get">
+            <summary>
+            Simple liveness check — returns 200 if the API is running.
+            </summary>
+        </member>
+        <member name="T:Robe.Api.Controllers.MeController">
+            <summary>
+            Auth verification — confirms a token is valid and returns the caller's identity.
+            </summary>
+        </member>
+        <member name="M:Robe.Api.Controllers.MeController.Get">
+            <summary>
+            Return the current user's identity derived from the validated JWT.
+            </summary>
+        </member>
+        <member name="T:Robe.Api.Controllers.ProfileController">
+            <summary>
+            Style profile generation and retrieval.
+            </summary>
+        </member>
+        <member name="M:Robe.Api.Controllers.ProfileController.Generate(System.Threading.CancellationToken)">
+            <summary>
+            Generate or refresh the current user's style profile from their wardrobe.
+            </summary>
+        </member>
+        <member name="M:Robe.Api.Controllers.ProfileController.Get(System.Threading.CancellationToken)">
+            <summary>
+            Get the current user's last generated style profile.
+            </summary>
+        </member>
+        <member name="T:Robe.Api.Controllers.RecommendationsController">
+            <summary>
+            Style-matched clothing recommendations.
+            </summary>
+        </member>
+        <member name="M:Robe.Api.Controllers.RecommendationsController.Recommend(Robe.Api.Controllers.RecommendRequest,System.Threading.CancellationToken)">
+            <summary>
+            Get ranked recommendations based on the user's style profile and inventory.
+            </summary>
+            <remarks>
+            Requires a generated style profile. Returns items ranked by fit score,
+            filtered by optional budget, category, and occasion constraints.
+            </remarks>
+        </member>
+    </members>
+</doc>
