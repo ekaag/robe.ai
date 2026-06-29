@@ -148,27 +148,44 @@ SDK) is referenced. Controllers reference Core only.
 
 ---
 
-## API contract & OpenAPI (single source of truth for the frontend)
+## API contract & OpenAPI (single source of truth for the frontend)  ✅ DONE
 
-The backend is the contract owner. It emits an **OpenAPI document** that the
-frontend (`packages/types` and the API client in `FRONTEND.md`) generates from,
-so the DTOs are never hand-copied in two repos and can't silently drift.
+The backend is the contract owner. It emits an **OpenAPI 3.0.1 document** that
+the frontend (`packages/types` and the API client in `FRONTEND.md`) generates
+from, so the DTOs are never hand-copied in two repos and can't silently drift.
 
-Backend:
-- Generate the spec from the running API. On **.NET 8** use **Swashbuckle**
-  (`Swashbuckle.AspNetCore`); on **.NET 9+** use the built-in
-  **`Microsoft.AspNetCore.OpenApi`** package. (Confirm which ships with your
-  template — this changed between versions.)
-- Expose it at `/openapi/v1.json` (or `/swagger/v1/swagger.json`) and also
-  **write it to a file** committed to the repo (e.g. `contracts/openapi.json`)
-  via a build step, so codegen doesn't require a running server.
-- Annotate DTOs and endpoints so the spec is accurate: explicit request/response
-  types, status codes (`[ProducesResponseType]` / typed results), required vs
-  nullable fields. The generated spec is only as good as these annotations.
+### Current setup
+
+- **Library:** Swashbuckle.AspNetCore 6.5.0 (configured in `Program.cs`).
+- **Swagger UI:** available at `/swagger` in all environments.
+- **Spec endpoint:** `/swagger/v1/swagger.json` — served live from the running API.
+- **Committed spec:** `contracts/openapi.json` — checked into the repo so
+  frontend codegen doesn't require a running server.
+- **XML docs:** enabled (`GenerateDocumentationFile` in `robe.api.csproj`);
+  controller summaries and remarks appear in the spec.
+- **JWT Bearer security:** defined in the spec as the `Bearer` scheme; Swagger UI
+  has an "Authorize" button for pasting tokens.
+- **Typed response DTOs:** all controllers use explicit response types from
+  `robe.api/Models/ApiResponses.cs` (`AnalyzeResponse`, `GarmentResponse`,
+  `GarmentListResponse`, `ProfileResponse`, `RecommendationsResponse`,
+  `ErrorResponse`). Every action has `[ProducesResponseType]` attributes so
+  Swashbuckle emits accurate status codes and schemas.
+
+### Regenerating the spec
+
+```bash
+# start the API, fetch the spec, stop
+dotnet run --project robe.api &
+sleep 5
+curl -s http://localhost:5000/swagger/v1/swagger.json -o contracts/openapi.json
+kill %1
+```
+
 - **Working rule:** when an endpoint or DTO changes, regenerate
-  `contracts/openapi.json` in the same change — treat a stale spec as a bug.
+  `contracts/openapi.json` in the same commit — treat a stale spec as a bug.
 
-Frontend codegen (from `contracts/openapi.json`):
+### Frontend codegen (from `contracts/openapi.json`)
+
 - Types: **`openapi-typescript`** → feeds `packages/types`.
 - Client + TanStack Query hooks: **`orval`** (or `openapi-typescript-codegen`).
 - Microsoft-stack alternative: **Kiota** generates a typed client (incl. TS) and
