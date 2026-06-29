@@ -18,9 +18,9 @@ monorepo, so design tokens, API client, types, and auth logic are written once.
     endpoint (`GET /api/me` or `/api/users/me/profile`) on web + mobile.
     Prereq: live Entra External ID tenant + app registrations + provider creds
     (you set these up in Entra + each provider's portal).  ⬜
-2. **Wardrobe + Garment detail** — list, upload, trait view (backend APIs 1–2)  ⬜
-3. **Style profile** — generate + view (backend API 3)  ⬜
-4. **Recommendations** — ranked shop list with filters (backend API 4)  ⬜
+2. **Wardrobe + Garment detail** — list, upload, trait view (backend APIs 1–2)  ✅
+3. **Style profile** — generate + view (backend API 3)  ✅
+4. **Recommendations** — ranked shop list with filters (backend API 4)  ✅
 5+ Event suggestions, etc. — follow once the backend APIs exist.
 
 Same cadence as the backend: build one, test it, get sign-off, move on. Flip ⬜
@@ -51,13 +51,15 @@ to ✅ here as you finish each.
 ```
 vestra/
   apps/
-    web/        Next.js (App Router) — marketing + authed app
+    web/        Next.js 14.2 (App Router) — marketing + authed app
     mobile/     Expo (Expo Router) — iOS + Android
   packages/
     tokens/     design tokens (colors, type, spacing) as TS — one source of truth
     types/      TS types mirroring backend DTOs (GarmentTraits, Garment, ...)
     api/        typed API client + TanStack Query hooks, behind IApiClient
+                peerDeps: react; devDeps: @types/react, react, vitest
     auth/       MSAL wrapper behind IAuthProvider (web + native impls)
+                peerDeps: react; devDeps: @types/react, react, vitest
     ui-core/    cross-platform primitives (tokens-driven) — optional
 ```
 
@@ -153,6 +155,7 @@ Typed client + TanStack Query hooks, behind an interface so it's mockable.
 
 ```ts
 interface IApiClient {
+  getMe(): Promise<MeUser>;                                      // auth check
   analyzeGarment(image: ImageInput): Promise<GarmentTraits>;     // API #1
   addGarment(input: AddGarmentInput): Promise<Garment>;          // API #2
   listGarments(q?: GarmentQuery): Promise<Garment[]>;            // API #2
@@ -168,11 +171,25 @@ interface IApiClient {
 - An auth interceptor calls `auth.getAccessToken()` and attaches the Bearer
   header; on `401` it triggers silent refresh, then redirects to sign-in.
 - Expose **TanStack Query** hooks so screens never call the client directly:
-  `useGarments`, `useGarment`, `useAddGarment`, `useStyleProfile`,
-  `useGenerateProfile`, `useRecommendations`. Server state lives in Query;
-  keep client-only state (filters, form drafts) minimal and local.
+  `useGarments`, `useGarment`, `useAddGarment`, `useDeleteGarment`,
+  `useAnalyzeGarment`, `useStyleProfile`, `useGenerateProfile`,
+  `useRecommendations`. Server state lives in Query; keep client-only state
+  (filters, form drafts) minimal and local.
+- `useRecommendations(ctx, enabled?)` accepts an optional `enabled` flag so the
+  shop page can skip fetching when no profile exists yet.
 - `types` package mirrors the backend DTOs exactly — `GarmentTraits`, `Garment`,
-  `StyleProfile`, `InventoryItem`, `RecommendationContext`, `Recommendation`.
+  `StyleProfile`, `InventoryItem`, `RecommendationContext`, `Recommendation`,
+  `MeUser`. Field names match the backend's camelCase JSON serialization:
+  - `Garment` includes `modifiedAt`, `createdByUserId`, `modifiedByUserId`
+    (matching `GarmentResponse`).
+  - `StyleProfile` uses `createdAt`/`modifiedAt` (not `generatedAt`) to match
+    `ProfileResponse`.
+  - `InventoryItem` has flat `price`/`currency` fields, `vendorId`, `url`,
+    `name`, `description`, `inStock` (matching the backend entity).
+  - `Recommendation` uses `inventoryItem` and `reasoning` (matching backend
+    property names).
+  - `RecommendationContext` uses `maxBudget`, `currency`, `categories`,
+    `occasion`, `count` (matching `RecommendRequest`).
   **Do not hand-write these**: codegen from the backend's committed
   `contracts/openapi.json` (see "API contract & OpenAPI" in CLAUDE.md) using
   `openapi-typescript` for types and `orval` for the client/hooks, wired as a
@@ -182,17 +199,35 @@ interface IApiClient {
 
 ## Screens (map to mock + backend)
 
-| Screen | Route | Backend | Key components |
-|---|---|---|---|
-| Sign in | `/login` | Entra | ProviderButton ×4, secured footer |
-| Wardrobe | `/wardrobe` | #1–2 | filter Chips, GarmentCard grid, AddTile |
-| Garment detail | `/wardrobe/[id]` | #1–2 | hero, TraitRow, FormalityDots, ConfidenceBar |
-| Style profile | `/profile` | #3 | style Chips, PaletteStrip, FormalityDots, quote |
-| Recommendations | `/shop` | #4 | filter Chips, recommendation rows, ScoreBadge |
+| Screen | Route | Backend | Key components | Status |
+|---|---|---|---|---|
+| Sign in | `/login` | Entra | ProviderButton ×4 | ✅ |
+| Wardrobe | `/wardrobe` | #1–2 | FilterChips, GarmentCard grid, AddTile, UploadFlow modal | ✅ |
+| Garment detail | `/wardrobe/[id]` | #1–2 | hero image, TraitRow, FormalityDots, ConfidenceBar | ✅ |
+| Style profile | `/profile` | #3 | style Chips, PaletteStrip, FormalityDots, summary quote | ✅ |
+| Recommendations | `/shop` | #4 | FilterChips, budget input, recommendation cards, ScoreBadge | ✅ |
 
 Navigation: web = left sidebar (Wardrobe / Style / Shop) + account footer;
 mobile = bottom tab bar (Closet / Style / Shop). Both gate everything except
 `/login` behind a valid session.
+
+### Implemented component inventory (web)
+
+| Component | File | Purpose |
+|---|---|---|
+| `Providers` | `components/Providers.tsx` | QueryClient + auth + API client provider wiring |
+| `AuthGuard` | `components/AuthGuard.tsx` | Route gate; redirects unauthenticated to `/login` |
+| `AppShell` | `components/AppShell.tsx` | Left sidebar nav + account footer + sign-out |
+| `UploadFlow` | `components/UploadFlow.tsx` | Multi-step modal: pick image → analyze → review → save |
+| `GarmentCard` | `components/GarmentCard.tsx` | Grid tile with garment image + primary color badge |
+| `FilterChips` | `components/FilterChips.tsx` | Category filter toggle chips |
+| `AddTile` | `components/AddTile.tsx` | "+" button tile to trigger upload |
+| `TraitRow` | `components/TraitRow.tsx` | Label–value row for trait details |
+| `FormalityDots` | `components/FormalityDots.tsx` | Visual 1–5 dot indicator |
+| `ConfidenceBar` | `components/ConfidenceBar.tsx` | Progress bar for extraction confidence |
+| `PaletteStrip` | `components/PaletteStrip.tsx` | Color swatches with weight labels |
+| `ProviderButton` | `components/ProviderButton.tsx` | Social sign-in button |
+| `ScoreBadge` | `components/ScoreBadge.tsx` | Accent pill showing fit score as percentage |
 
 ---
 

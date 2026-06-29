@@ -192,7 +192,7 @@ export default function ProfilePage() {
       {/* Metadata */}
       <p style={{ fontSize: "0.8125rem", color: "var(--color-muted)", margin: 0 }}>
         {profile.garmentCount} {profile.garmentCount === 1 ? "piece" : "pieces"} &middot;{" "}
-        Generated {new Date(profile.generatedAt).toLocaleDateString()}
+        Generated {new Date(profile.modifiedAt).toLocaleDateString()}
       </p>
     </div>
   );

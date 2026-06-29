@@ -103,7 +103,7 @@ export default function StyleScreen() {
       {/* Metadata */}
       <Text style={styles.meta}>
         {profile.garmentCount} {profile.garmentCount === 1 ? "piece" : "pieces"} · Generated{" "}
-        {new Date(profile.generatedAt).toLocaleDateString()}
+        {new Date(profile.modifiedAt).toLocaleDateString()}
       </Text>
     </ScrollView>
   );

@@ -13,6 +13,7 @@ import type {
   GarmentFit,
   Season,
   MeUser,
+  GarmentCategory,
 } from "@vestra/types";
 
 export interface IApiClient {
@@ -141,6 +142,9 @@ const fakeGarment: Garment = {
   traits: fakeTraits,
   imageUrl: "https://placehold.co/300x400/ECE4D6/221C15?text=Garment",
   createdAt: "2026-01-01T00:00:00Z",
+  modifiedAt: "2026-01-01T00:00:00Z",
+  createdByUserId: "usr_fake",
+  modifiedByUserId: "usr_fake",
 };
 
 const fakeGarment2: Garment = {
@@ -162,6 +166,9 @@ const fakeGarment2: Garment = {
   },
   imageUrl: "https://placehold.co/300x400/E2D7C4/221C15?text=Jeans",
   createdAt: "2026-01-02T00:00:00Z",
+  modifiedAt: "2026-01-02T00:00:00Z",
+  createdByUserId: "usr_fake",
+  modifiedByUserId: "usr_fake",
 };
 
 const fakeGarment3: Garment = {
@@ -183,6 +190,9 @@ const fakeGarment3: Garment = {
   },
   imageUrl: "https://placehold.co/300x400/FBF8F1/221C15?text=Jacket",
   createdAt: "2026-01-03T00:00:00Z",
+  modifiedAt: "2026-01-03T00:00:00Z",
+  createdByUserId: "usr_fake",
+  modifiedByUserId: "usr_fake",
 };
 
 const fakeGarments: Garment[] = [fakeGarment, fakeGarment2, fakeGarment3];
@@ -198,23 +208,80 @@ const fakeProfile: StyleProfile = {
   seasonalSkew: { spring: 0.3, summer: 0.4, fall: 0.2, winter: 0.1 } as Partial<Record<Season, number>>,
   summary: "Leans minimalist and neutral, favors regular-fit everyday pieces.",
   garmentCount: 5,
-  generatedAt: "2026-01-01T00:00:00Z",
+  createdAt: "2026-01-01T00:00:00Z",
+  modifiedAt: "2026-01-01T00:00:00Z",
+  createdByUserId: "usr_fake",
+  modifiedByUserId: "usr_fake",
 };
 
-const fakeInventoryItem: InventoryItem = {
-  id: "inv_001",
-  merchant: "demo-store",
-  traits: fakeTraits,
-  price: { amount: 49.0, currency: "USD" },
-  productUrl: "https://example.com/item/001",
-  imageUrl: "https://placehold.co/300x400/E2D7C4/221C15?text=Item",
-};
+const fakeInventoryItems: InventoryItem[] = [
+  {
+    id: "inv_001",
+    vendorId: "demo-store",
+    name: "Classic Navy Tee",
+    description: "A timeless cotton crew-neck in deep navy.",
+    traits: fakeTraits,
+    price: 49.0,
+    currency: "USD",
+    url: "https://example.com/item/001",
+    imageUrl: "https://placehold.co/300x400/E2D7C4/221C15?text=Item+1",
+    inStock: true,
+  },
+  {
+    id: "inv_002",
+    vendorId: "demo-store",
+    name: "Slim Chinos",
+    description: "Versatile slim-fit chinos in khaki.",
+    traits: {
+      ...fakeTraits,
+      category: "bottom" as const,
+      subcategory: "chinos",
+      primaryColor: { name: "khaki", hex: "#c3b091" },
+      fit: "slim",
+    },
+    price: 65.0,
+    currency: "USD",
+    url: "https://example.com/item/002",
+    imageUrl: "https://placehold.co/300x400/F2ECDF/221C15?text=Item+2",
+    inStock: true,
+  },
+  {
+    id: "inv_003",
+    vendorId: "demo-store",
+    name: "Wool Blend Blazer",
+    description: "A refined wool-blend blazer for layered looks.",
+    traits: {
+      ...fakeTraits,
+      category: "outerwear" as const,
+      subcategory: "blazer",
+      primaryColor: { name: "charcoal", hex: "#36454f" },
+      material: "wool blend",
+      formality: 4,
+      styleTags: ["classic", "formal"] as StyleTag[],
+    },
+    price: 189.0,
+    currency: "USD",
+    url: "https://example.com/item/003",
+    imageUrl: "https://placehold.co/300x400/FBF8F1/221C15?text=Item+3",
+    inStock: true,
+  },
+];
 
 const fakeRecommendations: Recommendation[] = [
   {
-    item: fakeInventoryItem,
+    inventoryItem: fakeInventoryItems[0],
     score: 0.92,
-    reason: "Matches your minimalist, neutral palette; regular fit.",
+    reasoning: "Matches your minimalist, neutral palette; regular fit.",
+  },
+  {
+    inventoryItem: fakeInventoryItems[1],
+    score: 0.85,
+    reasoning: "Complements your casual-classic wardrobe; slim fit you prefer.",
+  },
+  {
+    inventoryItem: fakeInventoryItems[2],
+    score: 0.71,
+    reasoning: "A step up in formality that rounds out your wardrobe.",
   },
 ];
 
@@ -227,7 +294,8 @@ export class FakeApiClient implements IApiClient {
     return fakeTraits;
   }
   async addGarment(input: AddGarmentInput): Promise<Garment> {
-    return { ...fakeGarment, traits: input.traits, id: `grm_${Date.now()}` };
+    const now = new Date().toISOString();
+    return { ...fakeGarment, traits: input.traits, id: `grm_${Date.now()}`, createdAt: now, modifiedAt: now };
   }
   async listGarments(q?: GarmentQuery): Promise<Garment[]> {
     if (q?.category) return fakeGarments.filter((g) => g.traits.category === q.category);
@@ -245,7 +313,14 @@ export class FakeApiClient implements IApiClient {
   async getProfile(): Promise<StyleProfile | null> {
     return fakeProfile;
   }
-  async getRecommendations(_ctx: RecommendationContext): Promise<Recommendation[]> {
-    return fakeRecommendations;
+  async getRecommendations(ctx: RecommendationContext): Promise<Recommendation[]> {
+    let results = fakeRecommendations;
+    if (ctx.maxBudget != null) {
+      results = results.filter((r) => r.inventoryItem.price <= ctx.maxBudget!);
+    }
+    if (ctx.categories && ctx.categories.length > 0) {
+      results = results.filter((r) => ctx.categories!.includes(r.inventoryItem.traits.category));
+    }
+    return results;
   }
 }

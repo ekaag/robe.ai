@@ -15,6 +15,11 @@
     "@vestra/types": "workspace:*"
   },
   "devDependencies": {
+    "@types/react": "^18.3.0",
+    "react": "^18.3.0",
     "vitest": "^1.6.0"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0"
   }
 }

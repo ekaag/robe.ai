@@ -119,7 +119,7 @@ export function useGenerateProfile() {
   });
 }
 
-export function useRecommendations(ctx: RecommendationContext) {
+export function useRecommendations(ctx: RecommendationContext, enabled = true) {
   const api = useApiClient();
-  return useQuery({ queryKey: ["recommendations", ctx], queryFn: () => api.getRecommendations(ctx) });
+  return useQuery({ queryKey: ["recommendations", ctx], queryFn: () => api.getRecommendations(ctx), enabled });
 }

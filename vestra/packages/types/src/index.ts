@@ -55,6 +55,9 @@ export interface Garment {
   traits: GarmentTraits;
   imageUrl: string;
   createdAt: string;
+  modifiedAt: string;
+  createdByUserId: string;
+  modifiedByUserId: string;
 }
 
 export interface AddGarmentInput extends ImageInput {
@@ -87,35 +90,39 @@ export interface StyleProfile {
   seasonalSkew: Partial<Record<Season, number>>;
   summary: string;
   garmentCount: number;
-  generatedAt: string;
+  createdAt: string;
+  modifiedAt: string;
+  createdByUserId: string;
+  modifiedByUserId: string;
 }
 
 // ---- API #4: Recommendation matching ----
 
-export interface Price {
-  amount: number;
-  currency: string;
-}
-
 export interface InventoryItem {
   id: string;
-  merchant: string;
+  vendorId: string;
+  name: string;
+  description: string;
   traits: GarmentTraits;
-  price: Price;
-  productUrl: string;
+  price: number;
+  currency: string;
+  url: string;
   imageUrl: string;
+  inStock: boolean;
 }
 
 export interface RecommendationContext {
-  budgetMax?: number;
+  maxBudget?: number;
+  currency?: string;
   categories?: GarmentCategory[];
-  excludeOwned?: boolean;
+  occasion?: string;
+  count?: number;
 }
 
 export interface Recommendation {
-  item: InventoryItem;
+  inventoryItem: InventoryItem;
   score: number;    // 0–1 fit score
-  reason: string;
+  reasoning: string;
 }
 
 // ---- Auth / Me ----
