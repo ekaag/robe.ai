@@ -44,13 +44,16 @@ export class HttpApiClient implements IApiClient {
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
     const token = await this.getToken();
+    const headers: Record<string, string> = {};
+    if (body !== undefined) headers["Content-Type"] = "application/json";
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
     const res = await fetch(`${this.baseUrl}${path}`, {
       method,
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
+      headers,
       body: body !== undefined ? JSON.stringify(body) : undefined,
+      mode: "cors",
+      referrerPolicy: "no-referrer",
     });
     if (res.status === 401) {
       this.onUnauthorized?.();

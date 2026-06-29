@@ -124,14 +124,17 @@ var allowedOrigins = (builder.Configuration
     .Where(o => !string.IsNullOrWhiteSpace(o))
     .ToArray();
 
+if (allowedOrigins.Length == 0)
+    allowedOrigins = new[] { "http://localhost:3000", "http://localhost:3001" };
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowConfiguredOrigins", policy =>
     {
-        var origins = allowedOrigins.Length > 0
-            ? allowedOrigins
-            : new[] { "http://localhost:3000" };
-        policy.WithOrigins(origins).AllowAnyHeader().AllowAnyMethod();
+        policy.WithOrigins(allowedOrigins)
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .WithExposedHeaders("Content-Disposition", "Location");
     });
 });
 
