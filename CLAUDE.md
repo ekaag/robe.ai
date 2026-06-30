@@ -445,9 +445,9 @@ namespace mirrors its folder (e.g. `Robe.Infrastructure.Persistence.Azure`).
 
 | Stage | Resource group | Key Vault | App Service Plan | `ASPNETCORE_ENVIRONMENT` |
 |---|---|---|---|---|
-| dev | `rg-robe-dev` | `kv-robe-dev` | F1 (Free) | `Dev` |
-| gamma | `rg-robe-gamma` | `kv-robe-gamma` | S1 (Standard) | `Gamma` |
-| live | `rg-robe-live` | `kv-robe-live` | P1v3 (PremiumV3) | `Live` |
+| dev | `rg-robe-dev` | `kv-robeai-dev` | F1 (Free) | `Dev` |
+| gamma | `rg-robe-gamma` | `kv-robeai-gamma` | S1 (Standard) | `Gamma` |
+| live | `rg-robe-live` | `kv-robeai-live` | P1v3 (PremiumV3) | `Live` |
 
 - `appsettings.Dev.json` / `appsettings.Gamma.json` / `appsettings.Live.json`
   (`robe.api/`) each hold only the non-secret `KeyVault:VaultUri` for that
@@ -471,12 +471,12 @@ namespace mirrors its folder (e.g. `Robe.Infrastructure.Persistence.Azure`).
   - **Bicep never sets secret values** — after deploying a stage, populate its
     vault out-of-band:
     ```bash
-    az keyvault secret set --vault-name kv-robe-dev --name AzureOpenAI--Endpoint --value <...>
-    az keyvault secret set --vault-name kv-robe-dev --name AzureOpenAI--ApiKey --value <...>
-    az keyvault secret set --vault-name kv-robe-dev --name AzureOpenAI--DeploymentName --value <...>
+    az keyvault secret set --vault-name kv-robeai-dev --name AzureOpenAI--Endpoint --value <...>
+    az keyvault secret set --vault-name kv-robeai-dev --name AzureOpenAI--ApiKey --value <...>
+    az keyvault secret set --vault-name kv-robeai-dev --name AzureOpenAI--DeploymentName --value <...>
     ```
   - Deploy: `az login` → `az account set --subscription <id>` →
-    `az deployment sub create --location eastus --template-file infra/Azure/bicep/main.bicep`.
+    `az deployment sub create --location canadacentral --template-file infra/Azure/bicep/main.bicep`.
   - `infra/Azure/bicep/dev-create.sh` — deploys the dev stage alone, populates
     throwaway secrets, publishes + deploys the API, then smoke tests the Key
     Vault/managed identity/RBAC wiring via the unauthenticated
@@ -492,7 +492,7 @@ namespace mirrors its folder (e.g. `Robe.Infrastructure.Persistence.Azure`).
   - `infra/Azure/bicep/dev-teardown.sh` — deletes `rg-robe-dev` so dev stops
     accruing cost between runs. Run it once you're done. `--yes` skips the
     confirm prompt, `--wait` blocks until the delete finishes, `--purge-vault`
-    also purges the soft-deleted `kv-robe-dev` so the name is reusable
+    also purges the soft-deleted `kv-robeai-dev` so the name is reusable
     immediately instead of staying reserved for up to 90 days.
 
 ---

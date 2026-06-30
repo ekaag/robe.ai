@@ -6,20 +6,20 @@
 // Deploy:
 //   az login
 //   az account set --subscription <subscription-id>
-//   az deployment sub create --location eastus --template-file infra/Azure/bicep/main.bicep
+//   az deployment sub create --location canadacentral --template-file infra/Azure/bicep/main.bicep
 //
 // To deploy a single stage instead, use modules/stage.bicep directly with the
 // matching parameters/<stage>.bicepparam file against an existing resource group.
 //
 // This template never sets secret values — after deploy, populate each vault:
-//   az keyvault secret set --vault-name kv-robe-dev --name AzureOpenAI--Endpoint --value <...>
-//   az keyvault secret set --vault-name kv-robe-dev --name AzureOpenAI--ApiKey --value <...>
-//   az keyvault secret set --vault-name kv-robe-dev --name AzureOpenAI--DeploymentName --value <...>
-//   (repeat for kv-robe-gamma / kv-robe-live)
+//   az keyvault secret set --vault-name kv-robeai-dev --name AzureOpenAI--Endpoint --value <...>
+//   az keyvault secret set --vault-name kv-robeai-dev --name AzureOpenAI--ApiKey --value <...>
+//   az keyvault secret set --vault-name kv-robeai-dev --name AzureOpenAI--DeploymentName --value <...>
+//   (repeat for kv-robeai-gamma / kv-robeai-live)
 
 targetScope = 'subscription'
 
-param location string = 'eastus'
+param location string = 'canadacentral'
 
 resource rgDev 'Microsoft.Resources/resourceGroups@2024-03-01' = {
   name: 'rg-robe-dev'

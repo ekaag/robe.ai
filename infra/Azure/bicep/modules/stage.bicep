@@ -1,5 +1,6 @@
 // Per-stage resource set for the Robe.AI API: Key Vault (RBAC-authorized, secrets
-// populated out-of-band — never via this template), a Linux App Service with a
+// populated out-of-band — never via this template), a Windows App Service (Linux
+// App Service Plans hit quota/availability limits on Free-tier SKUs) with a
 // system-assigned managed identity granted "Key Vault Secrets User" on its own
 // vault only, and Application Insights wired into the App Service's connection
 // string app setting. Deployed once per stage (dev/gamma/live) into that stage's
@@ -32,7 +33,7 @@ var keyVaultSecretsUserRoleId = '4633458b-17de-408a-b874-0445c86b69e6'
 var aspnetEnvironmentName = '${toUpper(take(stageName, 1))}${skip(stageName, 1)}'
 
 resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
-  name: 'kv-robe-${stageName}'
+  name: 'kv-robeai-${stageName}'
   location: location
   properties: {
     sku: {
@@ -50,10 +51,7 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
 resource appServicePlan 'Microsoft.Web/serverfarms@2023-12-01' = {
   name: 'asp-robe-${stageName}'
   location: location
-  kind: 'linux'
-  properties: {
-    reserved: true
-  }
+  kind: 'app'
   sku: {
     name: appServicePlanSkuName
     tier: appServicePlanSkuTier
@@ -79,7 +77,7 @@ resource appService 'Microsoft.Web/sites@2023-12-01' = {
     serverFarmId: appServicePlan.id
     httpsOnly: true
     siteConfig: {
-      linuxFxVersion: 'DOTNETCORE|7.0'
+      netFrameworkVersion: 'v7.0'
       // F1 (Free) doesn't support Always On.
       alwaysOn: appServicePlanSkuTier != 'Free'
       appSettings: [

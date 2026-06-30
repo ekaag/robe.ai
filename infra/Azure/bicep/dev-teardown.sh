@@ -4,7 +4,7 @@
 # resource group (Key Vault, App Service, Plan, App Insights) in one shot.
 #
 # Dev has Key Vault purge protection OFF, so the deleted vault soft-deletes
-# instead of disappearing immediately — the name kv-robe-dev stays reserved
+# instead of disappearing immediately — the name kv-robeai-dev stays reserved
 # for up to 90 days unless purged. Pass --purge-vault to reclaim the name
 # right away (only meaningful if you plan to redeploy soon).
 #
@@ -14,8 +14,8 @@
 set -euo pipefail
 
 RESOURCE_GROUP="rg-robe-dev"
-LOCATION="eastus"
-KEY_VAULT="kv-robe-dev"
+LOCATION="canadacentral"
+KEY_VAULT="kv-robeai-dev"
 
 ASSUME_YES=false
 WAIT_FOR_DELETE=false

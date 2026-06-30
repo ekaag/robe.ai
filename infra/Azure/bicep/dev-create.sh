@@ -36,8 +36,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
 RESOURCE_GROUP="rg-robe-dev"
-LOCATION="eastus"
-KEY_VAULT="kv-robe-dev"
+LOCATION="canadacentral"
+KEY_VAULT="kv-robeai-dev"
 APP_SERVICE="app-robe-dev"
 APP_URL="https://${APP_SERVICE}.azurewebsites.net"
 
