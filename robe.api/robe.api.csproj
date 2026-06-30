@@ -20,4 +20,15 @@
     <ProjectReference Include="..\robe.infrastructure\robe.infrastructure.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Local-only fakes config (mocked secrets, in-memory everything) must
+         never ship to a deployed stage. The Web SDK auto-includes every
+         appsettings*.json as publishable Content by default; override that
+         here so dotnet publish drops it even though it stays available for
+         local `dotnet run`/build. -->
+    <Content Update="appsettings.Local.json">
+      <CopyToPublishDirectory>Never</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>

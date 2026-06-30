@@ -25,7 +25,18 @@ using Robe.Infrastructure.TraitsExtraction.Azure;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: false);
+// appsettings.Local.json (mocked secrets, in-memory everything) must never
+// affect a deployed stage. It's already excluded from the publish output
+// (see robe.api.csproj), but gate the load here too as defense in depth —
+// a stale/manually-copied file should still be inert against a real stage.
+// Local dev has no ASPNETCORE_ENVIRONMENT convention of its own (no
+// launchSettings.json), so allow the load anywhere except the three known
+// deployed stage names rather than requiring an explicit "Local" value.
+var deployedStageEnvironments = new[] { "Dev", "Gamma", "Live" };
+if (!deployedStageEnvironments.Contains(builder.Environment.EnvironmentName))
+{
+    builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: false);
+}
 var useLocalFakes = builder.Configuration.GetValue<bool>("UseLocalFakes");
 
 builder.Services.AddControllers()

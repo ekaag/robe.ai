@@ -19,7 +19,11 @@
       "Bash(bash -n \"/c/code/ekaag/robe.ai/infra/Azure/bicep/dev-smoke-test.sh\")",
       "Bash(chmod +x dev-create.sh dev-teardown.sh)",
       "Bash(bash -n dev-create.sh)",
-      "Bash(bash -n dev-teardown.sh)"
+      "Bash(bash -n dev-teardown.sh)",
+      "Bash(rm -rf /tmp/robe-publish-check)"
+    ],
+    "additionalDirectories": [
+      "\\tmp"
     ]
   }
 }
