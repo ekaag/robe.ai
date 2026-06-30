@@ -481,7 +481,14 @@ namespace mirrors its folder (e.g. `Robe.Infrastructure.Persistence.Azure`).
     throwaway secrets, publishes + deploys the API, then smoke tests the Key
     Vault/managed identity/RBAC wiring via the unauthenticated
     `POST /api/garments/analyze`. Leaves the stage running (`--yes` skips the
-    confirm prompt) so you can iterate against it.
+    deploy confirm prompt) so you can iterate against it. If `az` CLI isn't
+    found it asks for explicit consent before installing it (winget/brew/
+    Microsoft's Linux script) — asked even under `--yes`, since installing
+    software is a bigger ask than skipping a confirmation. Picks which
+    subscription to deploy into via `--subscription=<id-or-name>`, or an
+    interactive numbered picker from `az account list` when neither
+    `--subscription` nor `--yes` is given (with `--yes` alone it just uses
+    whatever's currently active).
   - `infra/Azure/bicep/dev-teardown.sh` — deletes `rg-robe-dev` so dev stops
     accruing cost between runs. Run it once you're done. `--yes` skips the
     confirm prompt, `--wait` blocks until the delete finishes, `--purge-vault`
