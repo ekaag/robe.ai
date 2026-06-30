@@ -111,6 +111,52 @@ interface IAuthProvider {
 
 ---
 
+## Local dev auth bypass & CIAM quirks
+
+For local development without a live Entra session, the stack supports running
+with auth fully bypassed on both sides:
+
+- **Frontend**: leave `NEXT_PUBLIC_ENTRA_CLIENT_ID` unset/empty in `.env.local`.
+  `readEntraConfig()` then returns `null`, `Providers.tsx` falls back to
+  `FakeAuthProvider` instead of `WebMsalAuthProvider`. `FakeAuthProvider` now
+  starts **pre-authenticated** (`currentUser` defaults to a `dev-user` identity)
+  so `AuthGuard` doesn't bounce you to `/login` — no sign-in click needed.
+- **Backend**: leave `Entra:Authority` / `Entra:ClientId` empty in
+  `appsettings.Local.json`. `Program.cs` then registers `LocalAuthHandler`
+  instead of JWT Bearer.
+
+`LocalAuthHandler` (`robe.infrastructure/Auth/LocalAuthHandler.cs`) resolves
+the current user in priority order so it works whether or not a real token is
+attached:
+1. **`Authorization: Bearer <jwt>`** — decodes the JWT **payload only** (no
+   signature/issuer validation — local dev only) and pulls `oid`/`sub` as the
+   user id, plus `name`/`given_name`+`family_name`/`email`/`idp`. This means
+   signing in for real (Google via CIAM) on the frontend still gives the
+   backend your real identity even though the backend isn't doing crypto
+   validation.
+2. **`X-User-Id` header** — explicit override, mainly for tests.
+3. Falls back to a default `dev-user` identity.
+
+To switch back to real Entra validation: uncomment `Entra:Authority` /
+`Entra:ClientId` in `appsettings.Local.json` and set
+`NEXT_PUBLIC_ENTRA_CLIENT_ID` (+ related `NEXT_PUBLIC_ENTRA_*` vars) in
+`apps/web/.env.local`. Restart both processes — config is read once at
+startup (`reloadOnChange: false`).
+
+**CIAM + Google federation gives a sparse ID token.** By default CIAM user
+flows don't return `given_name`, `family_name`, `name`, or `email` claims for
+social-federated sign-ins, so `WebMsalAuthProvider`'s `accountToUser()` can't
+build a real display name from the token alone. Current fallback order:
+`given_name`+`family_name` → `name` claim → `account.name` → email
+(`email` claim → `preferred_username` claim → `account.username` if it looks
+like an email). If everything is empty, `AppShell` displays
+**"`{Provider}` Account"** (e.g. "Google Account") instead of the raw OID GUID.
+To get the user's actual name/email into the token: in the Entra admin center,
+open the CIAM user flow → **User attributes** and **Application claims** →
+enable **Display Name** and **Email Address**.
+
+---
+
 ## Design tokens (from the approved mock)
 
 Editorial / warm-neutral direction. Single source of truth in `packages/tokens`.
@@ -177,6 +223,10 @@ interface IApiClient {
   (filters, form drafts) minimal and local.
 - `useRecommendations(ctx, enabled?)` accepts an optional `enabled` flag so the
   shop page can skip fetching when no profile exists yet.
+- `GET /api/garments` returns `{ items, page, pageSize }`, not a bare array —
+  `listGarments()` unwraps `res.items` so `IApiClient.listGarments()` keeps
+  returning `Garment[]` to callers. Don't change the client's return type
+  without also reconciling this unwrap.
 - `types` package mirrors the backend DTOs exactly — `GarmentTraits`, `Garment`,
   `StyleProfile`, `InventoryItem`, `RecommendationContext`, `Recommendation`,
   `MeUser`. Field names match the backend's camelCase JSON serialization:
