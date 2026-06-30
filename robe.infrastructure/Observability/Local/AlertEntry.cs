@@ -6,5 +6,6 @@ public sealed record AlertEntry(
     AlertSeverity Severity,
     string Message,
     string CorrelationId,
+    string UserId,
     IReadOnlyDictionary<string, object?>? Context,
     DateTimeOffset Timestamp);

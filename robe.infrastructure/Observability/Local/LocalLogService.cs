@@ -29,13 +29,13 @@ public class LocalLogService : ILogService
         IReadOnlyDictionary<string, object?>? properties = null,
         Exception? exception = null)
     {
-        var entry = new LogEntry(severity, message, _correlation.CorrelationId, properties, exception, DateTimeOffset.UtcNow);
+        var entry = new LogEntry(severity, message, _correlation.CorrelationId, _correlation.UserId, properties, exception, DateTimeOffset.UtcNow);
 
         _recent.Enqueue(entry);
         while (_recent.Count > MaxRecentEntries) _recent.TryDequeue(out _);
 
-        _logger.Log(ToLogLevel(severity), exception, "[{CorrelationId}] {Message} {Properties}",
-            entry.CorrelationId, message, Format(properties));
+        _logger.Log(ToLogLevel(severity), exception, "[{CorrelationId}] [{UserId}] {Message} {Properties}",
+            entry.CorrelationId, entry.UserId, message, Format(properties));
     }
 
     private static string Format(IReadOnlyDictionary<string, object?>? properties) =>

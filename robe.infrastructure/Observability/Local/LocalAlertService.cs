@@ -27,13 +27,13 @@ public class LocalAlertService : IAlertService
         IReadOnlyDictionary<string, object?>? context = null,
         CancellationToken ct = default)
     {
-        var entry = new AlertEntry(severity, message, _correlation.CorrelationId, context, DateTimeOffset.UtcNow);
+        var entry = new AlertEntry(severity, message, _correlation.CorrelationId, _correlation.UserId, context, DateTimeOffset.UtcNow);
 
         _recent.Enqueue(entry);
         while (_recent.Count > MaxRecentEntries) _recent.TryDequeue(out _);
 
-        _logger.LogCritical("ALERT [{Severity}] [{CorrelationId}] {Message} {Context}",
-            severity, entry.CorrelationId, message, Format(context));
+        _logger.LogCritical("ALERT [{Severity}] [{CorrelationId}] [{UserId}] {Message} {Context}",
+            severity, entry.CorrelationId, entry.UserId, message, Format(context));
 
         return Task.CompletedTask;
     }

@@ -29,6 +29,7 @@ public class ApplicationInsightsAlertService : IAlertService
         telemetry.Properties["severity"] = severity.ToString();
         telemetry.Properties["message"] = message;
         telemetry.Properties["correlationId"] = _correlation.CorrelationId;
+        telemetry.Properties["userId"] = _correlation.UserId;
         if (context is not null)
             foreach (var (key, value) in context)
                 telemetry.Properties[key] = value?.ToString() ?? string.Empty;

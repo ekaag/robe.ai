@@ -42,6 +42,27 @@ public class LocalLogServiceTests
     }
 
     [Fact]
+    public void Log_AttachesCurrentUserId()
+    {
+        var correlation = new AsyncLocalCorrelationContextAccessor { UserId = "user-a" };
+        var service = CreateService(correlation);
+
+        service.Log(LogSeverity.Information, "hello");
+
+        Assert.Equal("user-a", Assert.Single(service.RecentEntries).UserId);
+    }
+
+    [Fact]
+    public void Log_WithNoAuthenticatedUser_LeavesUserIdEmpty()
+    {
+        var service = CreateService();
+
+        service.Log(LogSeverity.Information, "hello");
+
+        Assert.Equal("", Assert.Single(service.RecentEntries).UserId);
+    }
+
+    [Fact]
     public void Log_CapturesExceptionWhenProvided()
     {
         var service = CreateService();
@@ -95,6 +116,17 @@ public class LocalMetricsServiceTests
     }
 
     [Fact]
+    public void Increment_AttachesCurrentUserId()
+    {
+        var correlation = new AsyncLocalCorrelationContextAccessor { UserId = "user-a" };
+        var service = CreateService(correlation);
+
+        service.Increment("garments.stored");
+
+        Assert.Equal("user-a", Assert.Single(service.RecentEntries).UserId);
+    }
+
+    [Fact]
     public void Time_RecordsElapsedMillisecondsOnDispose()
     {
         var service = CreateService();
@@ -124,6 +156,17 @@ public class LocalAlertServiceTests
         Assert.Equal(AlertSeverity.Critical, entry.Severity);
         Assert.Equal("Azure OpenAI call failed", entry.Message);
         Assert.Equal("ExtractionException", entry.Context?["exception"]);
+    }
+
+    [Fact]
+    public async Task RaiseAsync_AttachesCurrentUserId()
+    {
+        var correlation = new AsyncLocalCorrelationContextAccessor { UserId = "user-a" };
+        var service = CreateService(correlation);
+
+        await service.RaiseAsync(AlertSeverity.Critical, "Azure OpenAI call failed");
+
+        Assert.Equal("user-a", Assert.Single(service.RecentEntries).UserId);
     }
 }
 

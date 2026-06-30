@@ -6,6 +6,7 @@ public sealed record LogEntry(
     LogSeverity Severity,
     string Message,
     string CorrelationId,
+    string UserId,
     IReadOnlyDictionary<string, object?>? Properties,
     Exception? Exception,
     DateTimeOffset Timestamp);

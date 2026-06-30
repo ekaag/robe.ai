@@ -2,15 +2,22 @@ using Robe.Core.Interfaces;
 
 namespace Robe.Infrastructure.Observability;
 
-// Singleton service; CorrelationId is backed by AsyncLocal so it still flows
-// per-request/per-async-chain even though this instance is shared.
+// Singleton service; CorrelationId/UserId are backed by AsyncLocal so they
+// still flow per-request/per-async-chain even though this instance is shared.
 public class AsyncLocalCorrelationContextAccessor : ICorrelationContextAccessor
 {
-    private static readonly AsyncLocal<string?> Current = new();
+    private static readonly AsyncLocal<string?> CurrentCorrelationId = new();
+    private static readonly AsyncLocal<string?> CurrentUserId = new();
 
     public string CorrelationId
     {
-        get => Current.Value ?? string.Empty;
-        set => Current.Value = value;
+        get => CurrentCorrelationId.Value ?? string.Empty;
+        set => CurrentCorrelationId.Value = value;
+    }
+
+    public string UserId
+    {
+        get => CurrentUserId.Value ?? string.Empty;
+        set => CurrentUserId.Value = value;
     }
 }

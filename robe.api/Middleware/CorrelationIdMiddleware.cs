@@ -20,7 +20,8 @@ public class CorrelationIdMiddleware
         HttpContext context,
         ICorrelationContextAccessor correlation,
         ILogService log,
-        IMetricsService metrics)
+        IMetricsService metrics,
+        ICurrentUser currentUser)
     {
         var correlationId = context.Request.Headers.TryGetValue(HeaderName, out var existing)
             && !string.IsNullOrWhiteSpace(existing)
@@ -38,6 +39,16 @@ public class CorrelationIdMiddleware
         finally
         {
             stopwatch.Stop();
+
+            // AsyncLocal mutations made deeper in the pipeline (e.g. by
+            // UserContextMiddleware, after this middleware's own await) aren't
+            // visible up here — re-resolve from the now-authenticated HttpContext
+            // so this completion log/metric still carries the caller's user id.
+            if (context.User.Identity?.IsAuthenticated == true)
+            {
+                try { correlation.UserId = currentUser.UserId; }
+                catch (InvalidOperationException) { /* claims missing despite IsAuthenticated — leave UserId empty */ }
+            }
 
             var tags = new Dictionary<string, string>
             {

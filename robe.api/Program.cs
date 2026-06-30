@@ -300,6 +300,11 @@ app.Use(async (context, next) =>
 
 app.UseAuthentication();
 app.UseAuthorization();
+
+// After auth so claims are populated — stamps the correlation context with
+// the caller's user id before any controller/decorator emits telemetry.
+app.UseMiddleware<UserContextMiddleware>();
+
 app.MapControllers();
 app.Run();
 

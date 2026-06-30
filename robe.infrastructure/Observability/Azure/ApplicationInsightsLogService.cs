@@ -44,6 +44,7 @@ public class ApplicationInsightsLogService : ILogService
     private void Populate(IDictionary<string, string> target, IReadOnlyDictionary<string, object?>? properties)
     {
         target["correlationId"] = _correlation.CorrelationId;
+        target["userId"] = _correlation.UserId;
         if (properties is null) return;
         foreach (var (key, value) in properties)
             target[key] = value?.ToString() ?? string.Empty;

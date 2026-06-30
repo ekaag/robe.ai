@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Robe.Api.Middleware;
 using Robe.Core.Interfaces;
 using Robe.Infrastructure.Auth;
+using Robe.Infrastructure.Observability.Local;
 using Robe.Infrastructure.Persistence;
 using Robe.Infrastructure.Profile;
 using Robe.Infrastructure.Recommendations;
@@ -21,8 +22,9 @@ public class CorrelationIdMiddlewareTests : IClassFixture<WebApplicationFactory<
 
     public CorrelationIdMiddlewareTests(WebApplicationFactory<Program> factory) => _factory = factory;
 
-    private HttpClient CreateClient() =>
-        _factory.WithWebHostBuilder(b =>
+    private (HttpClient Client, IServiceProvider Services) CreateClient()
+    {
+        var factory = _factory.WithWebHostBuilder(b =>
         {
             b.ConfigureTestServices(services =>
             {
@@ -53,7 +55,10 @@ public class CorrelationIdMiddlewareTests : IClassFixture<WebApplicationFactory<
                 services.RemoveAll<ICurrentUser>();
                 services.AddScoped<ICurrentUser, HttpContextCurrentUser>();
             });
-        }).CreateClient();
+        });
+
+        return (factory.CreateClient(), factory.Services);
+    }
 
     private static HttpRequestMessage AuthedGet(string url, string userId = "user-a")
     {
@@ -65,7 +70,7 @@ public class CorrelationIdMiddlewareTests : IClassFixture<WebApplicationFactory<
     [Fact]
     public async Task Response_AlwaysIncludesCorrelationIdHeader()
     {
-        var client = CreateClient();
+        var (client, _) = CreateClient();
 
         var resp = await client.SendAsync(AuthedGet("/api/me"));
 
@@ -76,7 +81,7 @@ public class CorrelationIdMiddlewareTests : IClassFixture<WebApplicationFactory<
     [Fact]
     public async Task Request_WithExistingCorrelationId_IsEchoedBackUnchanged()
     {
-        var client = CreateClient();
+        var (client, _) = CreateClient();
         var req = AuthedGet("/api/me");
         req.Headers.Add(CorrelationIdMiddleware.HeaderName, "client-supplied-id-123");
 
@@ -88,7 +93,7 @@ public class CorrelationIdMiddlewareTests : IClassFixture<WebApplicationFactory<
     [Fact]
     public async Task Request_WithoutCorrelationId_GeneratesANewOne()
     {
-        var client = CreateClient();
+        var (client, _) = CreateClient();
 
         var resp = await client.SendAsync(AuthedGet("/api/me"));
 
@@ -99,11 +104,96 @@ public class CorrelationIdMiddlewareTests : IClassFixture<WebApplicationFactory<
     [Fact]
     public async Task CorrelationId_IsPresentRegardlessOfResponseStatusCode()
     {
-        var client = CreateClient();
+        var (client, _) = CreateClient();
 
         var resp = await client.SendAsync(AuthedGet("/api/garments/grm_doesnotexist"));
 
         Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
         Assert.True(resp.Headers.Contains(CorrelationIdMiddleware.HeaderName));
+    }
+}
+
+public class UserContextMiddlewareTests : IClassFixture<WebApplicationFactory<Program>>
+{
+    private readonly WebApplicationFactory<Program> _factory;
+
+    public UserContextMiddlewareTests(WebApplicationFactory<Program> factory) => _factory = factory;
+
+    private (HttpClient Client, IServiceProvider Services) CreateClient()
+    {
+        var factory = _factory.WithWebHostBuilder(b =>
+        {
+            b.ConfigureTestServices(services =>
+            {
+                services.RemoveAll<ISecretManager>();
+                services.AddSingleton<ISecretManager>(new MockSecretManager(new Dictionary<string, string>()));
+
+                services.RemoveAll<ITraitsExtractor>();
+                services.AddScoped<ITraitsExtractor>(_ => FakeTraitsExtractor.ReturnsDefault());
+
+                services.RemoveAll<IGarmentRepository>();
+                services.AddSingleton<IGarmentRepository>(new InMemoryGarmentRepository());
+
+                services.RemoveAll<IImageStore>();
+                services.AddSingleton<IImageStore>(new InMemoryImageStore());
+
+                services.RemoveAll<IProfileGenerator>();
+                services.AddScoped<IProfileGenerator, FakeProfileGenerator>();
+
+                services.RemoveAll<IProfileRepository>();
+                services.AddSingleton<IProfileRepository>(new InMemoryProfileRepository());
+
+                services.RemoveAll<IRecommender>();
+                services.AddScoped<IRecommender, FakeRecommender>();
+
+                services.RemoveAll<IInventoryRepository>();
+                services.AddSingleton<IInventoryRepository>(new InMemoryInventoryRepository());
+
+                services.RemoveAll<ICurrentUser>();
+                services.AddScoped<ICurrentUser, HttpContextCurrentUser>();
+            });
+        });
+
+        return (factory.CreateClient(), factory.Services);
+    }
+
+    private static HttpRequestMessage AuthedGet(string url, string userId) =>
+        new(HttpMethod.Get, url) { Headers = { { LocalAuthHandler.UserIdHeader, userId } } };
+
+    [Fact]
+    public async Task AuthenticatedRequest_StampsUserIdOnEmittedLogs()
+    {
+        var (client, services) = CreateClient();
+
+        var resp = await client.SendAsync(AuthedGet("/api/me", "user-a"));
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+
+        var logService = (LocalLogService)services.GetRequiredService<ILogService>();
+        Assert.Contains(logService.RecentEntries, e => e.UserId == "user-a");
+    }
+
+    [Fact]
+    public async Task UnauthenticatedRequest_LeavesUserIdEmptyOnEmittedLogs()
+    {
+        var (client, services) = CreateClient();
+
+        var resp = await client.GetAsync("/api/me");
+        Assert.Equal(HttpStatusCode.Unauthorized, resp.StatusCode);
+
+        var logService = (LocalLogService)services.GetRequiredService<ILogService>();
+        Assert.Contains(logService.RecentEntries, e => e.UserId == "");
+    }
+
+    [Fact]
+    public async Task DifferentUsers_GetDistinctUserIdsOnTheirOwnRequests()
+    {
+        var (client, services) = CreateClient();
+
+        await client.SendAsync(AuthedGet("/api/me", "user-a"));
+        await client.SendAsync(AuthedGet("/api/me", "user-b"));
+
+        var logService = (LocalLogService)services.GetRequiredService<ILogService>();
+        Assert.Contains(logService.RecentEntries, e => e.UserId == "user-a");
+        Assert.Contains(logService.RecentEntries, e => e.UserId == "user-b");
     }
 }

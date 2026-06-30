@@ -28,13 +28,13 @@ public class LocalMetricsService : IMetricsService
 
     private void Record(MetricKind kind, string name, double value, IReadOnlyDictionary<string, string>? tags)
     {
-        var entry = new MetricEntry(kind, name, value, _correlation.CorrelationId, tags, DateTimeOffset.UtcNow);
+        var entry = new MetricEntry(kind, name, value, _correlation.CorrelationId, _correlation.UserId, tags, DateTimeOffset.UtcNow);
 
         _recent.Enqueue(entry);
         while (_recent.Count > MaxRecentEntries) _recent.TryDequeue(out _);
 
-        _logger.LogInformation("[{CorrelationId}] metric {Kind} {Name}={Value} {Tags}",
-            entry.CorrelationId, kind, name, value, Format(tags));
+        _logger.LogInformation("[{CorrelationId}] [{UserId}] metric {Kind} {Name}={Value} {Tags}",
+            entry.CorrelationId, entry.UserId, kind, name, value, Format(tags));
     }
 
     private static string Format(IReadOnlyDictionary<string, string>? tags) =>

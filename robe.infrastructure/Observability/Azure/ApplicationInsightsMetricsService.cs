@@ -27,6 +27,7 @@ public class ApplicationInsightsMetricsService : IMetricsService
     {
         var telemetry = new MetricTelemetry(name, value);
         telemetry.Properties["correlationId"] = _correlation.CorrelationId;
+        telemetry.Properties["userId"] = _correlation.UserId;
         if (tags is not null)
             foreach (var (key, value2) in tags)
                 telemetry.Properties[key] = value2;

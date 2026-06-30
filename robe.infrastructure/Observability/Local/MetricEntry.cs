@@ -7,5 +7,6 @@ public sealed record MetricEntry(
     string Name,
     double Value,
     string CorrelationId,
+    string UserId,
     IReadOnlyDictionary<string, string>? Tags,
     DateTimeOffset Timestamp);

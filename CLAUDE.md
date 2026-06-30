@@ -166,6 +166,7 @@ public interface IAlertService
 public interface ICorrelationContextAccessor
 {
     string CorrelationId { get; set; }
+    string UserId { get; set; }   // empty until UserContextMiddleware sets it post-auth
 }
 // impl: AsyncLocalCorrelationContextAccessor — single shared impl, not a Local/Azure choice
 ```
@@ -291,7 +292,9 @@ See "Dependency model" above for the four interfaces.
 - **`ICorrelationContextAccessor`** has exactly **one** implementation
   (`AsyncLocalCorrelationContextAccessor`, backed by `AsyncLocal<string>`) —
   it's plumbing shared by both Local and Azure, not a provider choice, so it's
-  registered once outside the `UseLocalFakes` toggle.
+  registered once outside the `UseLocalFakes` toggle. It carries both
+  `CorrelationId` and `UserId` so every log/metric/alert can be tied back to
+  who attempted the call, not just which request.
 - **Alarm semantics**: `IAlertService.RaiseAsync` is called explicitly by app
   code when something is wrong (e.g. an Azure OpenAI call failing). It does
   not evaluate thresholds itself — in the Azure impl it raises an `"Alert"`
@@ -317,6 +320,32 @@ Instrumentation is added via **decorators**, not by touching controllers
   already sent one; otherwise it mints a new GUID. The ID is echoed back on
   the response (`X-Correlation-Id`) and attached to every log/metric/alert
   emitted during that request via `ICorrelationContextAccessor`.
+- `UserContextMiddleware` (`robe.api/Middleware/`) runs **after**
+  `UseAuthentication`/`UseAuthorization` (claims aren't populated before
+  then) and stamps `ICorrelationContextAccessor.UserId` from `ICurrentUser`.
+  Because it sits after `UseAuthorization`, it never runs for a request
+  `[Authorize]` rejects — those keep `UserId` empty, which is correct (no
+  caller was ever authenticated). Everything *deeper* in the pipeline
+  (controllers, `Observable*` decorators) correctly sees the `UserId` it sets,
+  since `AsyncLocal` flows forward into whatever a middleware calls next.
+
+  **Gotcha — `AsyncLocal` does not flow backward.** `CorrelationIdMiddleware`
+  is the *outermost* wrapper; its own "HTTP request completed" log runs in its
+  `finally` block, i.e. in **its own continuation after `await _next(context)`
+  returns** — that continuation resumes with the `ExecutionContext` as it was
+  *before* the call, so it cannot see `UserId` mutations a deeper middleware
+  made inside that call. (Compare: `CorrelationIdMiddleware` *can* see its own
+  `CorrelationId` in that same log, because it set that value *itself*,
+  earlier in its *own* method body — that's just reading a property it wrote,
+  not cross-context propagation.) The fix: `CorrelationIdMiddleware` also
+  takes `ICurrentUser` and, in its `finally` block, re-checks
+  `context.User.Identity?.IsAuthenticated` and re-stamps
+  `correlation.UserId` itself before logging — `HttpContext.User` is a plain
+  mutable reference, not `AsyncLocal`, so it correctly reflects whatever
+  `UseAuthentication` set regardless of continuation boundaries. If you add
+  another "wraps the whole pipeline and logs at the end" middleware, you'll
+  hit this same trap — don't assume a deeper middleware's
+  `ICorrelationContextAccessor` writes are visible to your post-`next()` code.
 
 Both are wired in `Program.cs` under the same `UseLocalFakes` branch as
 everything else — e.g. `ITraitsExtractor` is registered as
