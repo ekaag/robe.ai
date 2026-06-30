@@ -14,7 +14,12 @@
       "Bash(mv Profile/AzureOpenAIProfileGenerator.cs Profile/Azure/AzureOpenAIProfileGenerator.cs)",
       "Bash(mv Recommendations/AzureOpenAIRecommender.cs Recommendations/Azure/AzureOpenAIRecommender.cs)",
       "Bash(cd /c/code/ekaag/robe.ai/robe.infrastructure && find . -name \"*.cs\" | sort)",
-      "Read(//c/c/code/ekaag/robe.ai/**)"
+      "Read(//c/c/code/ekaag/robe.ai/**)",
+      "Bash(chmod +x \"/c/code/ekaag/robe.ai/infra/Azure/bicep/dev-smoke-test.sh\")",
+      "Bash(bash -n \"/c/code/ekaag/robe.ai/infra/Azure/bicep/dev-smoke-test.sh\")",
+      "Bash(chmod +x dev-create.sh dev-teardown.sh)",
+      "Bash(bash -n dev-create.sh)",
+      "Bash(bash -n dev-teardown.sh)"
     ]
   }
 }

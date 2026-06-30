@@ -477,6 +477,50 @@ namespace mirrors its folder (e.g. `Robe.Infrastructure.Persistence.Azure`).
     ```
   - Deploy: `az login` → `az account set --subscription <id>` →
     `az deployment sub create --location eastus --template-file infra/Azure/bicep/main.bicep`.
+  - `infra/Azure/bicep/dev-create.sh` — deploys the dev stage alone, populates
+    throwaway secrets, publishes + deploys the API, then smoke tests the Key
+    Vault/managed identity/RBAC wiring via the unauthenticated
+    `POST /api/garments/analyze`. Leaves the stage running (`--yes` skips the
+    confirm prompt) so you can iterate against it.
+  - `infra/Azure/bicep/dev-teardown.sh` — deletes `rg-robe-dev` so dev stops
+    accruing cost between runs. Run it once you're done. `--yes` skips the
+    confirm prompt, `--wait` blocks until the delete finishes, `--purge-vault`
+    also purges the soft-deleted `kv-robe-dev` so the name is reusable
+    immediately instead of staying reserved for up to 90 days.
+
+---
+
+## Infra setup: CI pipeline for dev stage  ⬜ TODO (planned, not yet built)
+
+Goal: an on-demand + daily pipeline, checked into git, that creates the dev
+stage, runs tests, certifies it, and tears it down — so any dev can depend on
+it to verify changes throughout the day without anyone babysitting cost.
+Captured here so the design isn't lost; **do not build this until explicitly
+asked to** (same rule as "Planned APIs" below).
+
+- **Platform: GitHub Actions**, not Azure DevOps — this repo is hosted at
+  `github.com/ekaag/robe.ai`, so Actions needs no new infra to stand up and
+  lives next to the existing PR/`gh` workflow.
+- **Triggers**: `workflow_dispatch` (on-demand — any dev can fire it manually
+  or via `gh workflow run`) **and** `schedule` (daily cron).
+- **Auth**: OIDC federated credentials (`azure/login` with `id-token: write`)
+  rather than a long-lived service principal secret stored in GitHub — nothing
+  to leak or rotate.
+- **Concurrency group** on the workflow so an on-demand run and the daily cron
+  can't collide on the same shared `rg-robe-dev`.
+- **Runner**: `ubuntu-latest` (GitHub-hosted Linux) — this is also why
+  `dev-create.sh`/`dev-teardown.sh` are bash rather than PowerShell: Linux
+  runners are the default/cheapest on GitHub Actions (Windows runners cost
+  ~2x the minutes), and bash runs there unmodified.
+- **Steps**: `dev-create.sh --yes` (deploy + the smoke test it already runs)
+  → certify → `dev-teardown.sh --yes` gated on `if: always()` so teardown
+  still runs even if certify fails — that's what actually guarantees no
+  leaked cost.
+- **Open question to resolve before building**: should "certify" be just the
+  smoke test already embedded in `dev-create.sh`, or also the full `dotnet
+  test` xUnit suite run against the deployed instance? The latter needs the
+  suite pointed at a real HTTP endpoint instead of the in-process
+  `WebApplicationFactory` it uses today — not yet designed.
 
 ---
 
