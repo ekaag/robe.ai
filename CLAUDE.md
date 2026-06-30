@@ -26,11 +26,16 @@ for status.
 ## Stack  (← edit to match your real choices)
 
 - Language / framework: .NET 8 / ASP.NET Core Web API
-- Cloud: Azure
+- Cloud: Azure today; every external dependency sits behind an interface so a
+  second provider (AWS/GCP) can be added later without touching callers — see
+  "Multi-cloud folder convention" in "Secrets & per-stage cloud config" below
 - DB: Azure SQL (relational) or Cosmos DB (NoSQL) + Azure Blob Storage for images
 - Auth: Microsoft Entra ID — use Entra External ID (formerly Azure AD B2C) for consumer sign-in; JWT bearer tokens
 - LLM / Vision: Azure OpenAI Service, vision-capable model (gpt-4o) via the Chat Completions API
-- Hosting: Azure App Service or Azure Functions
+- Secrets: Azure Key Vault, one per deployment stage — see "Secrets & per-stage
+  cloud config" below
+- Hosting: Azure App Service (Linux), one per stage (dev/gamma/live) — see
+  "Secrets & per-stage cloud config" below
 - Observability: Application Insights / Azure Monitor (logs, metrics, alerts); Local
   console + in-memory implementation for dev/tests — see "Observability" below
 - Tests: xUnit + WebApplicationFactory for integration tests
@@ -55,6 +60,14 @@ for status.
 - **Keep the OpenAPI spec current**: regenerate `contracts/openapi.json` whenever
   an endpoint or DTO changes (see "API contract & OpenAPI"); the frontend codegens
   from it.
+- **Multi-cloud folder convention**: a cloud-specific implementation lives in a
+  per-feature `Azure/` subfolder with an `Azure`-prefixed class name (e.g.
+  `Persistence/Azure/AzureSqlGarmentRepository.cs`). Provider-agnostic
+  implementations (`Fake*`, `InMemory*`, `MockSecretManager`) stay directly
+  under the feature folder, not in `Azure/`. A future AWS/GCP implementation
+  gets its own sibling subfolder + provider prefix — never rename or move the
+  existing Azure implementation to make room for it. See "Secrets & per-stage
+  cloud config" below.
 
 ---
 
@@ -169,13 +182,22 @@ public interface ICorrelationContextAccessor
     string UserId { get; set; }   // empty until UserContextMiddleware sets it post-auth
 }
 // impl: AsyncLocalCorrelationContextAccessor — single shared impl, not a Local/Azure choice
+
+// ---- cross-cutting: secrets (used by any provider needing credentials, e.g. AzureOpenAITraitsExtractor) ----
+public interface ISecretManager
+{
+    Task<string> GetSecretAsync(string name, CancellationToken ct = default);
+}
+// impls: MockSecretManager | AzureKeyVaultSecretManager — see "Secrets & per-stage cloud config" below
 ```
 
 Project layout: interfaces and domain types (`GarmentTraits`, `Garment`,
 `StyleProfile`, `ImageInput`) live in a **Core/Domain** project with **no** SDK
 references. Each concrete implementation lives in an **Infrastructure**
 project/folder and is the only place an SDK (Azure OpenAI client, EF Core, Blob
-SDK) is referenced. Controllers reference Core only.
+SDK) is referenced. Controllers reference Core only. Within Infrastructure,
+cloud-specific implementations are further isolated per the "Multi-cloud
+folder convention" above.
 
 ---
 
@@ -316,12 +338,13 @@ See "Dependency model" above for the four interfaces.
 Instrumentation is added via **decorators**, not by touching controllers
 (respects "don't modify already-approved APIs"):
 - `ObservableTraitsExtractor`, `ObservableProfileGenerator`,
-  `ObservableRecommender`, `ObservableGarmentRepository`
+  `ObservableRecommender`, `ObservableGarmentRepository`,
+  `ObservableSecretManager`
   (`robe.infrastructure/Observability/Decorators/`) wrap the real/fake
   implementation, recording duration + success/failure counters + domain
   counters (`garment_traits.analyzed`, `profile.generated`,
-  `recommendations.served`, `garments.stored`, ...), and call
-  `IAlertService.RaiseAsync` when the wrapped LLM call throws.
+  `recommendations.served`, `garments.stored`, `secret.fetched`, ...), and call
+  `IAlertService.RaiseAsync` when the wrapped call throws.
 - `CorrelationIdMiddleware` (`robe.api/Middleware/`) is the **first**
   middleware in the pipeline (before `UseSwagger`/`UseCors`/auth) so every
   request — including failed CORS preflights and 401s — gets a correlation ID
@@ -372,6 +395,88 @@ everything else — e.g. `ITraitsExtractor` is registered as
   LLM/vendor call, a new repository), wrap its DI registration in an
   `Observable*` decorator the same way, rather than adding logging calls
   inside controllers.
+
+---
+
+## Secrets & per-stage cloud config (dev / gamma / live)  ✅ DONE
+
+Cross-cutting (not one of the numbered APIs) — same interface-first +
+Local/Azure dual-impl rule as Observability. The API deploys to three real
+Azure stages, each fully isolated, so a misconfigured stage can never read
+another stage's secrets.
+
+**Interface:** `ISecretManager` (see "Dependency model" above) — a single
+`GetSecretAsync(name, ct)` lookup; callers pass colon-namespaced names
+(`"AzureOpenAI:ApiKey"`) regardless of which implementation is behind it.
+
+### Implementations
+
+- **Local** (`robe.infrastructure/Secrets/MockSecretManager.cs`) — backed by
+  the `LocalSecrets` dictionary in `appsettings.Local.json`. Used whenever
+  `UseLocalFakes: true`, and swapped in by every integration test so tests
+  never touch a real vault.
+- **Azure** (`robe.infrastructure/Secrets/Azure/AzureKeyVaultSecretManager.cs`)
+  — `Azure.Security.KeyVault.Secrets.SecretClient` + `Azure.Identity`'s
+  `DefaultAzureCredential` (system-assigned managed identity in Azure; falls
+  back to `az`/VS credentials for local testing against a real vault). Colon
+  names map to Key Vault's allowed charset (`AzureOpenAI:ApiKey` →
+  `AzureOpenAI--ApiKey`, same convention as .NET's own `AddAzureKeyVault`
+  provider). Results are cached in-memory for 10 minutes so a `Scoped`
+  consumer like `AzureOpenAITraitsExtractor` — which reads 3 secrets per
+  request — doesn't round-trip to Key Vault on every call. A 404 from Key
+  Vault is rethrown as `KeyNotFoundException`, matching `MockSecretManager`'s
+  contract. The real `SecretClient` call sits behind an internal
+  `ISecretFetcher` seam purely for testability (a hand-written
+  `FakeSecretFetcher` in tests — no mocking library, same Fake/Mock
+  convention used everywhere else in this repo).
+- **`ObservableSecretManager`** wraps either implementation with
+  `secret.fetched`/`secret.fetch_failed` metrics and an
+  `IAlertService.RaiseAsync` call on failure — see "Observability" above.
+
+### Multi-cloud folder convention
+
+See the working rule of the same name above. In `robe.infrastructure`, every
+cloud-specific class so far lives in: `TraitsExtraction/Azure/`,
+`Storage/Azure/`, `Profile/Azure/`, `Recommendations/Azure/`,
+`Persistence/Azure/`, `Secrets/Azure/`, `Observability/Azure/` — each
+namespace mirrors its folder (e.g. `Robe.Infrastructure.Persistence.Azure`).
+
+### Per-stage config: dev / gamma / live
+
+| Stage | Resource group | Key Vault | App Service Plan | `ASPNETCORE_ENVIRONMENT` |
+|---|---|---|---|---|
+| dev | `rg-robe-dev` | `kv-robe-dev` | F1 (Free) | `Dev` |
+| gamma | `rg-robe-gamma` | `kv-robe-gamma` | S1 (Standard) | `Gamma` |
+| live | `rg-robe-live` | `kv-robe-live` | P1v3 (PremiumV3) | `Live` |
+
+- `appsettings.Dev.json` / `appsettings.Gamma.json` / `appsettings.Live.json`
+  (`robe.api/`) each hold only the non-secret `KeyVault:VaultUri` for that
+  stage — the URI is deterministic from the naming convention above, not
+  itself sensitive, so it's committed like `Cors:AllowedOrigins` already is.
+  Picked up for free by ASP.NET Core's standard
+  `appsettings.{ASPNETCORE_ENVIRONMENT}.json` convention; no extra code in
+  `Program.cs`. This is separate from `appsettings.Local.json`/
+  `UseLocalFakes`, which is local-machine dev with fully mocked secrets and
+  never touches a real stage.
+- Each stage's App Service has a **system-assigned managed identity** granted
+  the `Key Vault Secrets User` RBAC role on **only its own** vault — no
+  credentials to store or rotate for Key Vault access itself.
+- Infra is Bicep, in `infra/Azure/bicep/`:
+  - `modules/stage.bicep` — one stage's full resource set (Key Vault, App
+    Service Plan + App Service, Application Insights, the RBAC role
+    assignment). Deployable standalone against a matching
+    `parameters/<stage>.bicepparam`.
+  - `main.bicep` — subscription-scoped; creates all 3 resource groups and
+    deploys `stage.bicep` into each.
+  - **Bicep never sets secret values** — after deploying a stage, populate its
+    vault out-of-band:
+    ```bash
+    az keyvault secret set --vault-name kv-robe-dev --name AzureOpenAI--Endpoint --value <...>
+    az keyvault secret set --vault-name kv-robe-dev --name AzureOpenAI--ApiKey --value <...>
+    az keyvault secret set --vault-name kv-robe-dev --name AzureOpenAI--DeploymentName --value <...>
+    ```
+  - Deploy: `az login` → `az account set --subscription <id>` →
+    `az deployment sub create --location eastus --template-file infra/Azure/bicep/main.bicep`.
 
 ---
 

@@ -6,7 +6,7 @@
 // Deploy:
 //   az login
 //   az account set --subscription <subscription-id>
-//   az deployment sub create --location eastus --template-file infra/bicep/main.bicep
+//   az deployment sub create --location eastus --template-file infra/Azure/bicep/main.bicep
 //
 // To deploy a single stage instead, use modules/stage.bicep directly with the
 // matching parameters/<stage>.bicepparam file against an existing resource group.
