@@ -11,11 +11,17 @@ using Robe.Infrastructure.Observability.Azure;
 using Robe.Infrastructure.Observability.Decorators;
 using Robe.Infrastructure.Observability.Local;
 using Robe.Infrastructure.Persistence;
+using Robe.Infrastructure.Persistence.Azure;
 using Robe.Infrastructure.Profile;
+using Robe.Infrastructure.Profile.Azure;
 using Robe.Infrastructure.Recommendations;
+using Robe.Infrastructure.Recommendations.Azure;
 using Robe.Infrastructure.Secrets;
+using Robe.Infrastructure.Secrets.Azure;
 using Robe.Infrastructure.Storage;
+using Robe.Infrastructure.Storage.Azure;
 using Robe.Infrastructure.TraitsExtraction;
+using Robe.Infrastructure.TraitsExtraction.Azure;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -222,7 +228,13 @@ if (useLocalFakes)
 }
 else
 {
-    builder.Services.AddSingleton<ISecretManager, AzureKeyVaultSecretManager>();
+    var keyVaultUri = builder.Configuration["KeyVault:VaultUri"]
+        ?? throw new InvalidOperationException("KeyVault:VaultUri must be configured when UseLocalFakes is false.");
+    builder.Services.AddSingleton<ISecretManager>(sp => new ObservableSecretManager(
+        new AzureKeyVaultSecretManager(keyVaultUri),
+        sp.GetRequiredService<ILogService>(),
+        sp.GetRequiredService<IMetricsService>(),
+        sp.GetRequiredService<IAlertService>()));
 
     var telemetryConfig = TelemetryConfiguration.CreateDefault();
     var aiConnectionString = builder.Configuration["ApplicationInsights:ConnectionString"];
@@ -230,9 +242,9 @@ else
         telemetryConfig.ConnectionString = aiConnectionString;
     builder.Services.AddSingleton(new TelemetryClient(telemetryConfig));
 
-    builder.Services.AddSingleton<ILogService, ApplicationInsightsLogService>();
-    builder.Services.AddSingleton<IMetricsService, ApplicationInsightsMetricsService>();
-    builder.Services.AddSingleton<IAlertService, ApplicationInsightsAlertService>();
+    builder.Services.AddSingleton<ILogService, AzureApplicationInsightsLogService>();
+    builder.Services.AddSingleton<IMetricsService, AzureApplicationInsightsMetricsService>();
+    builder.Services.AddSingleton<IAlertService, AzureApplicationInsightsAlertService>();
 
     builder.Services.AddScoped<ITraitsExtractor>(sp => new ObservableTraitsExtractor(
         new AzureOpenAITraitsExtractor(sp.GetRequiredService<ISecretManager>()),
@@ -240,7 +252,7 @@ else
         sp.GetRequiredService<IMetricsService>(),
         sp.GetRequiredService<IAlertService>()));
     builder.Services.AddScoped<IGarmentRepository>(sp => new ObservableGarmentRepository(
-        new SqlGarmentRepository(),
+        new AzureSqlGarmentRepository(),
         sp.GetRequiredService<ILogService>(),
         sp.GetRequiredService<IMetricsService>()));
     builder.Services.AddScoped<IImageStore, AzureBlobImageStore>();
@@ -249,13 +261,13 @@ else
         sp.GetRequiredService<ILogService>(),
         sp.GetRequiredService<IMetricsService>(),
         sp.GetRequiredService<IAlertService>()));
-    builder.Services.AddScoped<IProfileRepository, SqlProfileRepository>();
+    builder.Services.AddScoped<IProfileRepository, AzureSqlProfileRepository>();
     builder.Services.AddScoped<IRecommender>(sp => new ObservableRecommender(
         new AzureOpenAIRecommender(),
         sp.GetRequiredService<ILogService>(),
         sp.GetRequiredService<IMetricsService>(),
         sp.GetRequiredService<IAlertService>()));
-    builder.Services.AddScoped<IInventoryRepository, SqlInventoryRepository>();
+    builder.Services.AddScoped<IInventoryRepository, AzureSqlInventoryRepository>();
 }
 
 var app = builder.Build();

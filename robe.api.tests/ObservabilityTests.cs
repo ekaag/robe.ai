@@ -7,7 +7,9 @@ using Robe.Infrastructure.Observability.Decorators;
 using Robe.Infrastructure.Observability.Local;
 using Robe.Infrastructure.Persistence;
 using Robe.Infrastructure.Profile;
+using Robe.Infrastructure.Profile.Azure;
 using Robe.Infrastructure.Recommendations;
+using Robe.Infrastructure.Secrets;
 using Robe.Infrastructure.TraitsExtraction;
 
 namespace Robe.Api.Tests;
@@ -313,5 +315,40 @@ public class ObservableGarmentRepositoryTests
 
         Assert.False(deleted);
         Assert.DoesNotContain(_metrics.RecentEntries, m => m.Name == "garments.deleted");
+    }
+}
+
+public class ObservableSecretManagerTests
+{
+    private readonly LocalLogService _log = new(NullLogger<LocalLogService>.Instance, new AsyncLocalCorrelationContextAccessor());
+    private readonly LocalMetricsService _metrics = new(NullLogger<LocalMetricsService>.Instance, new AsyncLocalCorrelationContextAccessor());
+    private readonly LocalAlertService _alerts = new(NullLogger<LocalAlertService>.Instance, new AsyncLocalCorrelationContextAccessor());
+
+    [Fact]
+    public async Task GetSecretAsync_OnSuccess_IncrementsCounter()
+    {
+        var decorator = new ObservableSecretManager(
+            new MockSecretManager(new Dictionary<string, string> { ["AzureOpenAI:ApiKey"] = "secret-value" }),
+            _log, _metrics, _alerts);
+
+        var value = await decorator.GetSecretAsync("AzureOpenAI:ApiKey");
+
+        Assert.Equal("secret-value", value);
+        Assert.Contains(_metrics.RecentEntries, m => m.Name == "secret.fetched");
+        Assert.Empty(_alerts.RecentEntries);
+    }
+
+    [Fact]
+    public async Task GetSecretAsync_OnFailure_IncrementsFailureCounterLogsErrorAndRaisesAlert_ThenRethrows()
+    {
+        var decorator = new ObservableSecretManager(
+            new MockSecretManager(new Dictionary<string, string>()),
+            _log, _metrics, _alerts);
+
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => decorator.GetSecretAsync("Missing:Secret"));
+
+        Assert.Contains(_metrics.RecentEntries, m => m.Name == "secret.fetch_failed");
+        Assert.Contains(_log.RecentEntries, e => e.Severity == LogSeverity.Error);
+        Assert.Single(_alerts.RecentEntries);
     }
 }

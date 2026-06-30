@@ -5,12 +5,12 @@ using Robe.Core.Observability;
 
 namespace Robe.Infrastructure.Observability.Azure;
 
-public class ApplicationInsightsLogService : ILogService
+public class AzureApplicationInsightsLogService : ILogService
 {
     private readonly TelemetryClient _telemetryClient;
     private readonly ICorrelationContextAccessor _correlation;
 
-    public ApplicationInsightsLogService(TelemetryClient telemetryClient, ICorrelationContextAccessor correlation)
+    public AzureApplicationInsightsLogService(TelemetryClient telemetryClient, ICorrelationContextAccessor correlation)
     {
         _telemetryClient = telemetryClient;
         _correlation = correlation;

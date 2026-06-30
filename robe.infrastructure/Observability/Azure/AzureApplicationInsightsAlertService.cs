@@ -8,12 +8,12 @@ namespace Robe.Infrastructure.Observability.Azure;
 // Raises an "Alert" event into Application Insights; Azure Monitor alert rules
 // (configured on the workspace) watch this signal and own thresholding/routing
 // to Action Groups. This service does not evaluate thresholds itself.
-public class ApplicationInsightsAlertService : IAlertService
+public class AzureApplicationInsightsAlertService : IAlertService
 {
     private readonly TelemetryClient _telemetryClient;
     private readonly ICorrelationContextAccessor _correlation;
 
-    public ApplicationInsightsAlertService(TelemetryClient telemetryClient, ICorrelationContextAccessor correlation)
+    public AzureApplicationInsightsAlertService(TelemetryClient telemetryClient, ICorrelationContextAccessor correlation)
     {
         _telemetryClient = telemetryClient;
         _correlation = correlation;

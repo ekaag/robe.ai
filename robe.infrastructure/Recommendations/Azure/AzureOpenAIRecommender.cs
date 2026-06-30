@@ -1,7 +1,7 @@
 using Robe.Core.Domain;
 using Robe.Core.Interfaces;
 
-namespace Robe.Infrastructure.Recommendations;
+namespace Robe.Infrastructure.Recommendations.Azure;
 
 public class AzureOpenAIRecommender : IRecommender
 {

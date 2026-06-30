@@ -7,7 +7,7 @@ using Robe.Core.Domain;
 using Robe.Core.Exceptions;
 using Robe.Core.Interfaces;
 
-namespace Robe.Infrastructure.TraitsExtraction;
+namespace Robe.Infrastructure.TraitsExtraction.Azure;
 
 public class AzureOpenAITraitsExtractor : ITraitsExtractor
 {

@@ -14,11 +14,17 @@
 
   <ItemGroup>
     <PackageReference Include="Azure.AI.OpenAI" Version="2.1.0" />
+    <PackageReference Include="Azure.Identity" Version="1.13.1" />
+    <PackageReference Include="Azure.Security.KeyVault.Secrets" Version="4.7.0" />
     <PackageReference Include="Microsoft.ApplicationInsights" Version="2.22.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\robe.core\robe.core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="robe.api.tests" />
   </ItemGroup>
 
 </Project>

@@ -4,12 +4,12 @@ using Robe.Core.Interfaces;
 
 namespace Robe.Infrastructure.Observability.Azure;
 
-public class ApplicationInsightsMetricsService : IMetricsService
+public class AzureApplicationInsightsMetricsService : IMetricsService
 {
     private readonly TelemetryClient _telemetryClient;
     private readonly ICorrelationContextAccessor _correlation;
 
-    public ApplicationInsightsMetricsService(TelemetryClient telemetryClient, ICorrelationContextAccessor correlation)
+    public AzureApplicationInsightsMetricsService(TelemetryClient telemetryClient, ICorrelationContextAccessor correlation)
     {
         _telemetryClient = telemetryClient;
         _correlation = correlation;

@@ -7,7 +7,14 @@
       "Bash(dotnet add *)",
       "Bash(tasklist //FI \"IMAGENAME eq dotnet.exe\" //FO LIST)",
       "Bash(tasklist //FI \"PID eq 56936\")",
-      "Bash(taskkill //PID 56936 //F)"
+      "Bash(taskkill //PID 56936 //F)",
+      "Bash(mkdir -p TraitsExtraction/Azure Storage/Azure Profile/Azure Recommendations/Azure Persistence/Azure Secrets/Azure)",
+      "Bash(mv TraitsExtraction/AzureOpenAITraitsExtractor.cs TraitsExtraction/Azure/AzureOpenAITraitsExtractor.cs)",
+      "Bash(mv Storage/AzureBlobImageStore.cs Storage/Azure/AzureBlobImageStore.cs)",
+      "Bash(mv Profile/AzureOpenAIProfileGenerator.cs Profile/Azure/AzureOpenAIProfileGenerator.cs)",
+      "Bash(mv Recommendations/AzureOpenAIRecommender.cs Recommendations/Azure/AzureOpenAIRecommender.cs)",
+      "Bash(cd /c/code/ekaag/robe.ai/robe.infrastructure && find . -name \"*.cs\" | sort)",
+      "Read(//c/c/code/ekaag/robe.ai/**)"
     ]
   }
 }

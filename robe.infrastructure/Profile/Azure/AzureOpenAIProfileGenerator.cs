@@ -1,7 +1,7 @@
 using Robe.Core.Domain;
 using Robe.Core.Interfaces;
 
-namespace Robe.Infrastructure.Profile;
+namespace Robe.Infrastructure.Profile.Azure;
 
 public class AzureOpenAIProfileGenerator : IProfileGenerator
 {

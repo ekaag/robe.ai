@@ -1,7 +1,7 @@
 using Robe.Core.Domain;
 using Robe.Core.Interfaces;
 
-namespace Robe.Infrastructure.Storage;
+namespace Robe.Infrastructure.Storage.Azure;
 
 // Stub — wire up Azure.Storage.Blobs when deploying to cloud.
 public class AzureBlobImageStore : IImageStore

@@ -94,7 +94,7 @@ public interface IGarmentRepository
     Task<IReadOnlyList<Garment>> ListAsync(string userId, GarmentQuery query, CancellationToken ct = default);
     Task<bool> DeleteAsync(string id, string userId, CancellationToken ct = default);
 }
-// impls: SqlGarmentRepository | CosmosGarmentRepository | InMemoryGarmentRepository
+// impls: AzureSqlGarmentRepository | CosmosGarmentRepository | InMemoryGarmentRepository
 
 public interface IImageStore
 {
@@ -121,7 +121,7 @@ public interface IProfileRepository
     Task SaveAsync(string userId, StyleProfile profile, CancellationToken ct = default);
     Task<StyleProfile?> GetAsync(string userId, CancellationToken ct = default);
 }
-// impls: SqlProfileRepository | CosmosProfileRepository | InMemoryProfileRepository
+// impls: AzureSqlProfileRepository | CosmosProfileRepository | InMemoryProfileRepository
 
 // ---- API #4: recommendation matching ----
 public interface IInventoryRepository
@@ -147,21 +147,21 @@ public interface ILogService
     void Log(LogSeverity severity, string message,
         IReadOnlyDictionary<string, object?>? properties = null, Exception? exception = null);
 }
-// impls: LocalLogService | ApplicationInsightsLogService
+// impls: LocalLogService | AzureApplicationInsightsLogService
 
 public interface IMetricsService
 {
     void Increment(string name, double value = 1, IReadOnlyDictionary<string, string>? tags = null);
     void RecordValue(string name, double value, IReadOnlyDictionary<string, string>? tags = null);
 }
-// impls: LocalMetricsService | ApplicationInsightsMetricsService
+// impls: LocalMetricsService | AzureApplicationInsightsMetricsService
 
 public interface IAlertService
 {
     Task RaiseAsync(AlertSeverity severity, string message,
         IReadOnlyDictionary<string, object?>? context = null, CancellationToken ct = default);
 }
-// impls: LocalAlertService | ApplicationInsightsAlertService
+// impls: LocalAlertService | AzureApplicationInsightsAlertService
 
 public interface ICorrelationContextAccessor
 {
@@ -295,7 +295,7 @@ See "Dependency model" above for the four interfaces.
   keep emitting it as its own `"key":"value"` pair, not concatenated into the
   message text.
 - **Azure** (`robe.infrastructure/Observability/Azure/`) —
-  `ApplicationInsightsLogService`/`MetricsService`/`AlertService`, built on
+  `AzureApplicationInsightsLogService`/`MetricsService`/`AlertService`, built on
   `Microsoft.ApplicationInsights`'s `TelemetryClient`. Pinned to the **2.x**
   package line (`2.22.0`) — the 3.x line pulls transitive packages that target
   newer TFMs than this solution and spam build warnings.
