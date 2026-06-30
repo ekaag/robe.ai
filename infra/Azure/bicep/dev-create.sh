@@ -184,22 +184,49 @@ if [ "$ASSUME_YES" != true ]; then
   esac
 fi
 
-echo "==> [1/6] Creating resource group $RESOURCE_GROUP in $LOCATION..."
+echo "==> [1/7] Creating resource group $RESOURCE_GROUP in $LOCATION..."
 az group create --name "$RESOURCE_GROUP" --location "$LOCATION" --output none
 
-echo "==> [2/6] Deploying dev stage infra (Key Vault, App Service, App Insights)..."
+echo "==> [2/7] Deploying dev stage infra (Key Vault, App Service, App Insights)..."
 az deployment group create \
   --resource-group "$RESOURCE_GROUP" \
   --template-file "$SCRIPT_DIR/modules/stage.bicep" \
   --parameters "$SCRIPT_DIR/parameters/dev.bicepparam" \
   --output none
 
-echo "==> [3/6] Populating Key Vault secrets..."
+echo "==> [3/7] Ensuring caller can write Key Vault secrets..."
+# kv-robeai-dev uses RBAC authorization (enableRbacAuthorization: true), and
+# stage.bicep only grants data-plane access to the App Service's managed
+# identity (read-only "Key Vault Secrets User"). Management-plane roles like
+# Owner/Contributor do NOT imply Key Vault data-plane access under RBAC mode,
+# so the signed-in CLI user needs an explicit "Key Vault Secrets Officer"
+# grant before `az keyvault secret set` below will succeed.
+USER_OBJECT_ID="$(az ad signed-in-user show --query id -o tsv)"
+VAULT_ID="$(az keyvault show --name "$KEY_VAULT" --resource-group "$RESOURCE_GROUP" --query id -o tsv)"
+# MSYS_NO_PATHCONV=1 is required on Git Bash/Windows: MSYS auto-converts any
+# argument starting with "/" into a Windows path before exec'ing a native
+# .exe/.cmd like az, which silently mangles "--scope /subscriptions/..." and
+# breaks the request (surfaces as a confusing "(MissingSubscription)" error).
+# Scoped to just these two calls — other az calls in this script (e.g.
+# --template-file, --src-path) rely on that same conversion for real local
+# file paths, so it must not be disabled globally.
+EXISTING_ASSIGNMENT="$(MSYS_NO_PATHCONV=1 az role assignment list --assignee "$USER_OBJECT_ID" --scope "$VAULT_ID" --role "Key Vault Secrets Officer" --query "[0].id" -o tsv)"
+if [ -z "$EXISTING_ASSIGNMENT" ]; then
+  MSYS_NO_PATHCONV=1 az role assignment create --role "Key Vault Secrets Officer" \
+    --assignee-object-id "$USER_OBJECT_ID" --assignee-principal-type User \
+    --scope "$VAULT_ID" --output none
+  echo "    Granted Key Vault Secrets Officer. Waiting 30s for RBAC propagation..."
+  sleep 30
+else
+  echo "    Already granted."
+fi
+
+echo "==> [4/7] Populating Key Vault secrets..."
 az keyvault secret set --vault-name "$KEY_VAULT" --name "AzureOpenAI--Endpoint" --value "$AOAI_ENDPOINT" --output none
 az keyvault secret set --vault-name "$KEY_VAULT" --name "AzureOpenAI--ApiKey" --value "$AOAI_API_KEY" --output none
 az keyvault secret set --vault-name "$KEY_VAULT" --name "AzureOpenAI--DeploymentName" --value "$AOAI_DEPLOYMENT" --output none
 
-echo "==> [4/6] Publishing and deploying robe.api..."
+echo "==> [5/7] Publishing and deploying robe.api..."
 PUBLISH_DIR="$(mktemp -d)"
 dotnet publish "$REPO_ROOT/robe.api" -c Release -o "$PUBLISH_DIR" --nologo
 ZIP_PATH="${PUBLISH_DIR}.zip"
@@ -207,7 +234,7 @@ make_zip "$PUBLISH_DIR" "$ZIP_PATH"
 az webapp deploy --resource-group "$RESOURCE_GROUP" --name "$APP_SERVICE" --src-path "$ZIP_PATH" --type zip --output none
 rm -rf "$PUBLISH_DIR" "$ZIP_PATH"
 
-echo "==> [5/6] Waiting for the app to come up..."
+echo "==> [6/7] Waiting for the app to come up..."
 STATUS="000"
 for i in $(seq 1 20); do
   STATUS="$(curl -s -o /dev/null -w '%{http_code}' "$APP_URL/swagger/v1/swagger.json" || echo "000")"
@@ -218,7 +245,7 @@ done
 [ "$STATUS" = "200" ] || fail "App never came up (last status=$STATUS). Check: az webapp log tail --resource-group $RESOURCE_GROUP --name $APP_SERVICE"
 echo "    App is up (swagger 200)."
 
-echo "==> [6/6] Smoke testing Key Vault wiring via POST /api/garments/analyze..."
+echo "==> [7/7] Smoke testing Key Vault wiring via POST /api/garments/analyze..."
 # 1x1 transparent PNG.
 TINY_PNG_BASE64="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
 
