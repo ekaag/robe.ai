@@ -134,8 +134,14 @@ attached:
    signing in for real (Google via CIAM) on the frontend still gives the
    backend your real identity even though the backend isn't doing crypto
    validation.
-2. **`X-User-Id` header** — explicit override, mainly for tests.
-3. Falls back to a default `dev-user` identity.
+2. **`X-User-Id` header** — explicit override, mainly for tests. `FakeAuthProvider`
+   sends this header (value `"dev-user"`) on every request, which is how local
+   dev gets a stable identity without a real token.
+3. **No credentials at all** (no Bearer token, no/blank `X-User-Id`) — returns
+   `AuthenticateResult.NoResult()`, so `[Authorize]` returns `401`. There is
+   **no implicit fallback identity anymore** — a request truly has to send
+   something to authenticate. If you see unexpected 401s locally, check that
+   `FakeAuthProvider`/the API client is attaching `X-User-Id`.
 
 To switch back to real Entra validation: uncomment `Entra:Authority` /
 `Entra:ClientId` in `appsettings.Local.json` and set
@@ -216,6 +222,13 @@ interface IApiClient {
 
 - An auth interceptor calls `auth.getAccessToken()` and attaches the Bearer
   header; on `401` it triggers silent refresh, then redirects to sign-in.
+- Every backend response carries an **`X-Correlation-Id`** header (echoed from
+  the request if the client sent one, otherwise server-generated) tying that
+  request to its backend logs/metrics/alerts. Useful in bug reports: log it
+  alongside client-side errors so a "this broke" report can be traced
+  server-side without timestamp-guessing. Not required — if the client never
+  sends one, the backend mints its own — but `HttpApiClient` may optionally
+  generate and attach one per request later for true end-to-end tracing.
 - Expose **TanStack Query** hooks so screens never call the client directly:
   `useGarments`, `useGarment`, `useAddGarment`, `useDeleteGarment`,
   `useAnalyzeGarment`, `useStyleProfile`, `useGenerateProfile`,

@@ -31,6 +31,8 @@ for status.
 - Auth: Microsoft Entra ID — use Entra External ID (formerly Azure AD B2C) for consumer sign-in; JWT bearer tokens
 - LLM / Vision: Azure OpenAI Service, vision-capable model (gpt-4o) via the Chat Completions API
 - Hosting: Azure App Service or Azure Functions
+- Observability: Application Insights / Azure Monitor (logs, metrics, alerts); Local
+  console + in-memory implementation for dev/tests — see "Observability" below
 - Tests: xUnit + WebApplicationFactory for integration tests
 
 ---
@@ -138,6 +140,34 @@ public interface IRecommender
         CancellationToken ct = default);
 }
 // impls: AzureOpenAIRecommender | ClaudeRecommender | FakeRecommender
+
+// ---- cross-cutting: observability (not tied to one API — see "Observability" below) ----
+public interface ILogService
+{
+    void Log(LogSeverity severity, string message,
+        IReadOnlyDictionary<string, object?>? properties = null, Exception? exception = null);
+}
+// impls: LocalLogService | ApplicationInsightsLogService
+
+public interface IMetricsService
+{
+    void Increment(string name, double value = 1, IReadOnlyDictionary<string, string>? tags = null);
+    void RecordValue(string name, double value, IReadOnlyDictionary<string, string>? tags = null);
+}
+// impls: LocalMetricsService | ApplicationInsightsMetricsService
+
+public interface IAlertService
+{
+    Task RaiseAsync(AlertSeverity severity, string message,
+        IReadOnlyDictionary<string, object?>? context = null, CancellationToken ct = default);
+}
+// impls: LocalAlertService | ApplicationInsightsAlertService
+
+public interface ICorrelationContextAccessor
+{
+    string CorrelationId { get; set; }
+}
+// impl: AsyncLocalCorrelationContextAccessor — single shared impl, not a Local/Azure choice
 ```
 
 Project layout: interfaces and domain types (`GarmentTraits`, `Garment`,
@@ -229,6 +259,72 @@ app.UseAuthorization();
   web/app origins per environment.
 - Bearer tokens in a header don't need `AllowCredentials`. Only add it for
   cookie-based auth, and then origins must be explicit (no `AllowAnyOrigin`).
+
+---
+
+## Observability: logging, metrics, alerts  ✅ DONE
+
+Cross-cutting (not one of the numbered APIs) — applies across the whole
+backend, same interface-first + Local/Azure dual-impl rule as everything else.
+See "Dependency model" above for the four interfaces.
+
+### Implementations
+
+- **Local** (`robe.infrastructure/Observability/Local/`) — `LocalLogService`,
+  `LocalMetricsService`, `LocalAlertService` write structured entries through
+  the standard `ILogger<T>` (console in dev) and also keep a bounded in-memory
+  buffer (`RecentEntries`), so the same classes work for local dev *and* test
+  assertions — no separate `Fake*` needed.
+- **Azure** (`robe.infrastructure/Observability/Azure/`) —
+  `ApplicationInsightsLogService`/`MetricsService`/`AlertService`, built on
+  `Microsoft.ApplicationInsights`'s `TelemetryClient`. Pinned to the **2.x**
+  package line (`2.22.0`) — the 3.x line pulls transitive packages that target
+  newer TFMs than this solution and spam build warnings.
+- **`ICorrelationContextAccessor`** has exactly **one** implementation
+  (`AsyncLocalCorrelationContextAccessor`, backed by `AsyncLocal<string>`) —
+  it's plumbing shared by both Local and Azure, not a provider choice, so it's
+  registered once outside the `UseLocalFakes` toggle.
+- **Alarm semantics**: `IAlertService.RaiseAsync` is called explicitly by app
+  code when something is wrong (e.g. an Azure OpenAI call failing). It does
+  not evaluate thresholds itself — in the Azure impl it raises an `"Alert"`
+  event into Application Insights; Azure Monitor alert rules (configured on
+  the workspace) own thresholding/routing to Action Groups.
+
+### Wiring — zero controller changes
+
+Instrumentation is added via **decorators**, not by touching controllers
+(respects "don't modify already-approved APIs"):
+- `ObservableTraitsExtractor`, `ObservableProfileGenerator`,
+  `ObservableRecommender`, `ObservableGarmentRepository`
+  (`robe.infrastructure/Observability/Decorators/`) wrap the real/fake
+  implementation, recording duration + success/failure counters + domain
+  counters (`garment_traits.analyzed`, `profile.generated`,
+  `recommendations.served`, `garments.stored`, ...), and call
+  `IAlertService.RaiseAsync` when the wrapped LLM call throws.
+- `CorrelationIdMiddleware` (`robe.api/Middleware/`) is the **first**
+  middleware in the pipeline (before `UseSwagger`/`UseCors`/auth) so every
+  request — including failed CORS preflights and 401s — gets a correlation ID
+  and HTTP metrics (`http.requests`, `http.request_duration_ms`). It reads
+  `X-Correlation-Id` from the incoming request and reuses it if the caller
+  already sent one; otherwise it mints a new GUID. The ID is echoed back on
+  the response (`X-Correlation-Id`) and attached to every log/metric/alert
+  emitted during that request via `ICorrelationContextAccessor`.
+
+Both are wired in `Program.cs` under the same `UseLocalFakes` branch as
+everything else — e.g. `ITraitsExtractor` is registered as
+`new ObservableTraitsExtractor(new AzureOpenAITraitsExtractor(...), log, metrics, alerts)`.
+
+### Config
+
+```jsonc
+// appsettings.json
+{ "ApplicationInsights": { "ConnectionString": "" } }  // set per environment; empty = no-op locally
+```
+
+- **Working rule**: when adding a new external-dependency interface (a new
+  LLM/vendor call, a new repository), wrap its DI registration in an
+  `Observable*` decorator the same way, rather than adding logging calls
+  inside controllers.
 
 ---
 
