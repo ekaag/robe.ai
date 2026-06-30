@@ -64,6 +64,40 @@ builder.Services.AddSwaggerGen(options =>
         }
     });
 
+    // Local dev only: LocalAuthHandler also accepts a plain X-User-Id header
+    // (see robe.infrastructure/Auth/LocalAuthHandler.cs), so expose it as an
+    // alternate "Authorize" option in Swagger UI — avoids hand-crafting a fake
+    // JWT just to click around locally. Gated on UseLocalFakes so this scheme
+    // never appears against a deployed (Entra-backed) environment.
+    if (useLocalFakes)
+    {
+        options.AddSecurityDefinition("X-User-Id", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+        {
+            Name = LocalAuthHandler.UserIdHeader,
+            Type = Microsoft.OpenApi.Models.SecuritySchemeType.ApiKey,
+            In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+            Description = "Local dev only: set a dev user id (e.g. \"dev-user\") to authenticate without a real JWT."
+        });
+
+        // A separate AddSecurityRequirement entry is an OR alternative to the
+        // Bearer requirement above (OpenAPI: items within one requirement are
+        // ANDed, items across the array are ORed) — so either credential works.
+        options.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
+        {
+            {
+                new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+                {
+                    Reference = new Microsoft.OpenApi.Models.OpenApiReference
+                    {
+                        Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
+                        Id = "X-User-Id"
+                    }
+                },
+                Array.Empty<string>()
+            }
+        });
+    }
+
     var xmlFile = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
     var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
     if (File.Exists(xmlPath))

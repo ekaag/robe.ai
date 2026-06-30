@@ -195,6 +195,14 @@ from, so the DTOs are never hand-copied in two repos and can't silently drift.
   controller summaries and remarks appear in the spec.
 - **JWT Bearer security:** defined in the spec as the `Bearer` scheme; Swagger UI
   has an "Authorize" button for pasting tokens.
+- **Local-only `X-User-Id` scheme:** when `UseLocalFakes: true`, `Program.cs`
+  registers a second security scheme (`X-User-Id`, ApiKey-in-header) as an OR
+  alternative to `Bearer`, matching the header `LocalAuthHandler` already
+  accepts (see "Local dev auth bypass" in `FRONTEND.md`). Click Authorize in
+  Swagger UI, set `X-User-Id` to any value (e.g. `dev-user`), and every "Try it
+  out" call authenticates without hand-crafting a JWT. Gated on `UseLocalFakes`
+  so it never appears against a deployed (Entra-backed) environment — cloud
+  Swagger still only offers `Bearer`.
 - **Typed response DTOs:** all controllers use explicit response types from
   `robe.api/Models/ApiResponses.cs` (`AnalyzeResponse`, `GarmentResponse`,
   `GarmentListResponse`, `ProfileResponse`, `RecommendationsResponse`,

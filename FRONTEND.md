@@ -143,6 +143,13 @@ attached:
    something to authenticate. If you see unexpected 401s locally, check that
    `FakeAuthProvider`/the API client is attaching `X-User-Id`.
 
+Testing the backend directly (outside the frontend) hits the same requirement:
+hitting `/swagger` locally and clicking "Try it out" with no header also 401s.
+Swagger UI exposes an `X-User-Id` "Authorize" option (alongside `Bearer`) for
+exactly this — see "API contract & OpenAPI" in `CLAUDE.md`. Set it once to a
+dev id like `dev-user` and every Swagger call authenticates the same way
+`FakeAuthProvider` does, without needing a real or hand-crafted JWT.
+
 To switch back to real Entra validation: uncomment `Entra:Authority` /
 `Entra:ClientId` in `appsettings.Local.json` and set
 `NEXT_PUBLIC_ENTRA_CLIENT_ID` (+ related `NEXT_PUBLIC_ENTRA_*` vars) in
