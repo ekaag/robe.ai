@@ -34,14 +34,15 @@ public class LocalLogService : ILogService
         _recent.Enqueue(entry);
         while (_recent.Count > MaxRecentEntries) _recent.TryDequeue(out _);
 
-        _logger.Log(ToLogLevel(severity), exception, "[{CorrelationId}] [{UserId}] {Message} {Properties}",
-            entry.CorrelationId, entry.UserId, message, Format(properties));
+        _logger.Log(ToLogLevel(severity), exception,
+            "\"correlationId\":\"{CorrelationId}\", \"userId\":\"{UserId}\", \"severity\":\"{Severity}\", \"message\":\"{Message}\"{PropertiesSuffix}",
+            entry.CorrelationId, entry.UserId, severity, message, FormatPropertiesSuffix(properties));
     }
 
-    private static string Format(IReadOnlyDictionary<string, object?>? properties) =>
+    private static string FormatPropertiesSuffix(IReadOnlyDictionary<string, object?>? properties) =>
         properties is null || properties.Count == 0
             ? string.Empty
-            : string.Join(", ", properties.Select(p => $"{p.Key}={p.Value}"));
+            : ", " + string.Join(", ", properties.Select(p => $"\"{p.Key}\":\"{p.Value}\""));
 
     private static LogLevel ToLogLevel(LogSeverity severity) => severity switch
     {

@@ -32,14 +32,15 @@ public class LocalAlertService : IAlertService
         _recent.Enqueue(entry);
         while (_recent.Count > MaxRecentEntries) _recent.TryDequeue(out _);
 
-        _logger.LogCritical("ALERT [{Severity}] [{CorrelationId}] [{UserId}] {Message} {Context}",
-            severity, entry.CorrelationId, entry.UserId, message, Format(context));
+        _logger.LogCritical(
+            "\"event\":\"alert\", \"severity\":\"{Severity}\", \"correlationId\":\"{CorrelationId}\", \"userId\":\"{UserId}\", \"message\":\"{Message}\"{ContextSuffix}",
+            severity, entry.CorrelationId, entry.UserId, message, FormatContextSuffix(context));
 
         return Task.CompletedTask;
     }
 
-    private static string Format(IReadOnlyDictionary<string, object?>? context) =>
+    private static string FormatContextSuffix(IReadOnlyDictionary<string, object?>? context) =>
         context is null || context.Count == 0
             ? string.Empty
-            : string.Join(", ", context.Select(c => $"{c.Key}={c.Value}"));
+            : ", " + string.Join(", ", context.Select(c => $"\"{c.Key}\":\"{c.Value}\""));
 }

@@ -283,7 +283,17 @@ See "Dependency model" above for the four interfaces.
   `LocalMetricsService`, `LocalAlertService` write structured entries through
   the standard `ILogger<T>` (console in dev) and also keep a bounded in-memory
   buffer (`RecentEntries`), so the same classes work for local dev *and* test
-  assertions — no separate `Fake*` needed.
+  assertions — no separate `Fake*` needed. The console line itself is a flat,
+  comma-separated `"key":"value"` list (camelCase keys matching the
+  Application Insights `Properties` dictionary keys, e.g. `correlationId`,
+  `userId`) rather than free-text — e.g.
+  `"correlationId":"...", "userId":"user-a", "severity":"Information",
+  "message":"...", "category":"top"`. Numeric values (metric `value`,
+  `durationMs`) are left unquoted. Any extra `properties`/`tags`/`context`
+  dictionary passed to `Log`/`RecordValue`/`RaiseAsync` is appended the same
+  way — **working rule**: if you add a new field to one of these services,
+  keep emitting it as its own `"key":"value"` pair, not concatenated into the
+  message text.
 - **Azure** (`robe.infrastructure/Observability/Azure/`) —
   `ApplicationInsightsLogService`/`MetricsService`/`AlertService`, built on
   `Microsoft.ApplicationInsights`'s `TelemetryClient`. Pinned to the **2.x**

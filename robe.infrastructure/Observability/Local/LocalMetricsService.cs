@@ -33,12 +33,13 @@ public class LocalMetricsService : IMetricsService
         _recent.Enqueue(entry);
         while (_recent.Count > MaxRecentEntries) _recent.TryDequeue(out _);
 
-        _logger.LogInformation("[{CorrelationId}] [{UserId}] metric {Kind} {Name}={Value} {Tags}",
-            entry.CorrelationId, entry.UserId, kind, name, value, Format(tags));
+        _logger.LogInformation(
+            "\"correlationId\":\"{CorrelationId}\", \"userId\":\"{UserId}\", \"kind\":\"{Kind}\", \"name\":\"{Name}\", \"value\":{Value}{TagsSuffix}",
+            entry.CorrelationId, entry.UserId, kind, name, value, FormatTagsSuffix(tags));
     }
 
-    private static string Format(IReadOnlyDictionary<string, string>? tags) =>
+    private static string FormatTagsSuffix(IReadOnlyDictionary<string, string>? tags) =>
         tags is null || tags.Count == 0
             ? string.Empty
-            : string.Join(", ", tags.Select(t => $"{t.Key}={t.Value}"));
+            : ", " + string.Join(", ", tags.Select(t => $"\"{t.Key}\":\"{t.Value}\""));
 }
