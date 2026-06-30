@@ -14,7 +14,7 @@ namespace Robe.Infrastructure.Auth;
 /// Priority order:
 ///   1. Authorization: Bearer &lt;jwt&gt;  — decodes payload (no sig validation) to get real user identity
 ///   2. X-User-Id header            — explicit override
-///   3. Default "dev-user" identity
+///   3. No credentials               — AuthenticateResult.NoResult(), [Authorize] returns 401
 /// </summary>
 public class LocalAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions>
 {
@@ -22,7 +22,6 @@ public class LocalAuthHandler : AuthenticationHandler<AuthenticationSchemeOption
     public const string UserIdHeader   = "X-User-Id";
     public const string UserNameHeader = "X-User-Name";
     public const string ProviderHeader = "X-User-Provider";
-    public const string DefaultDevUserId = "dev-user";
 
     public LocalAuthHandler(
         IOptionsMonitor<AuthenticationSchemeOptions> options,
@@ -46,12 +45,15 @@ public class LocalAuthHandler : AuthenticationHandler<AuthenticationSchemeOption
             }
         }
 
-        // 2. Fall back to explicit X-User-Id header.
-        var userId = Request.Headers.TryGetValue(UserIdHeader, out var userIdValues) &&
-                     !string.IsNullOrWhiteSpace(userIdValues.ToString())
-            ? userIdValues.ToString()
-            : DefaultDevUserId;
+        // 2. Fall back to explicit X-User-Id header. No Authorization header and no
+        // X-User-Id means the caller sent no credentials at all — let [Authorize] 401.
+        if (!Request.Headers.TryGetValue(UserIdHeader, out var userIdValues) ||
+            string.IsNullOrWhiteSpace(userIdValues.ToString()))
+        {
+            return Task.FromResult(AuthenticateResult.NoResult());
+        }
 
+        var userId = userIdValues.ToString();
         var claims = new List<Claim> { new(ClaimTypes.NameIdentifier, userId) };
 
         if (Request.Headers.TryGetValue(UserNameHeader, out var nameValues) &&

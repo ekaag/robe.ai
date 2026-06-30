@@ -1,8 +1,15 @@
 using System.Text.Json.Serialization;
+using Microsoft.ApplicationInsights;
+using Microsoft.ApplicationInsights.Extensibility;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.IdentityModel.Tokens;
+using Robe.Api.Middleware;
 using Robe.Core.Interfaces;
 using Robe.Infrastructure.Auth;
+using Robe.Infrastructure.Observability;
+using Robe.Infrastructure.Observability.Azure;
+using Robe.Infrastructure.Observability.Decorators;
+using Robe.Infrastructure.Observability.Local;
 using Robe.Infrastructure.Persistence;
 using Robe.Infrastructure.Profile;
 using Robe.Infrastructure.Recommendations;
@@ -140,6 +147,10 @@ builder.Services.AddCors(options =>
 
 builder.Services.AddScoped<ICurrentUser, HttpContextCurrentUser>();
 
+// Correlation ID is plumbing shared by both Local and Azure observability —
+// not a Local/Azure choice, so it's registered once outside the toggle below.
+builder.Services.AddSingleton<ICorrelationContextAccessor, AsyncLocalCorrelationContextAccessor>();
+
 if (useLocalFakes)
 {
     var secrets = builder.Configuration
@@ -147,27 +158,77 @@ if (useLocalFakes)
         .Get<Dictionary<string, string>>() ?? new Dictionary<string, string>();
 
     builder.Services.AddSingleton<ISecretManager>(new MockSecretManager(secrets));
-    builder.Services.AddScoped<ITraitsExtractor, FakeTraitsExtractor>();
-    builder.Services.AddSingleton<IGarmentRepository, InMemoryGarmentRepository>();
+
+    builder.Services.AddSingleton<ILogService, LocalLogService>();
+    builder.Services.AddSingleton<IMetricsService, LocalMetricsService>();
+    builder.Services.AddSingleton<IAlertService, LocalAlertService>();
+
+    builder.Services.AddScoped<ITraitsExtractor>(sp => new ObservableTraitsExtractor(
+        FakeTraitsExtractor.ReturnsDefault(),
+        sp.GetRequiredService<ILogService>(),
+        sp.GetRequiredService<IMetricsService>(),
+        sp.GetRequiredService<IAlertService>()));
+    builder.Services.AddSingleton<IGarmentRepository>(sp => new ObservableGarmentRepository(
+        new InMemoryGarmentRepository(),
+        sp.GetRequiredService<ILogService>(),
+        sp.GetRequiredService<IMetricsService>()));
     builder.Services.AddSingleton<IImageStore, InMemoryImageStore>();
-    builder.Services.AddScoped<IProfileGenerator, FakeProfileGenerator>();
+    builder.Services.AddScoped<IProfileGenerator>(sp => new ObservableProfileGenerator(
+        new FakeProfileGenerator(),
+        sp.GetRequiredService<ILogService>(),
+        sp.GetRequiredService<IMetricsService>(),
+        sp.GetRequiredService<IAlertService>()));
     builder.Services.AddSingleton<IProfileRepository, InMemoryProfileRepository>();
-    builder.Services.AddScoped<IRecommender, FakeRecommender>();
+    builder.Services.AddScoped<IRecommender>(sp => new ObservableRecommender(
+        new FakeRecommender(),
+        sp.GetRequiredService<ILogService>(),
+        sp.GetRequiredService<IMetricsService>(),
+        sp.GetRequiredService<IAlertService>()));
     builder.Services.AddSingleton<IInventoryRepository>(new InMemoryInventoryRepository());
 }
 else
 {
     builder.Services.AddSingleton<ISecretManager, AzureKeyVaultSecretManager>();
-    builder.Services.AddScoped<ITraitsExtractor, AzureOpenAITraitsExtractor>();
-    builder.Services.AddScoped<IGarmentRepository, SqlGarmentRepository>();
+
+    var telemetryConfig = TelemetryConfiguration.CreateDefault();
+    var aiConnectionString = builder.Configuration["ApplicationInsights:ConnectionString"];
+    if (!string.IsNullOrWhiteSpace(aiConnectionString))
+        telemetryConfig.ConnectionString = aiConnectionString;
+    builder.Services.AddSingleton(new TelemetryClient(telemetryConfig));
+
+    builder.Services.AddSingleton<ILogService, ApplicationInsightsLogService>();
+    builder.Services.AddSingleton<IMetricsService, ApplicationInsightsMetricsService>();
+    builder.Services.AddSingleton<IAlertService, ApplicationInsightsAlertService>();
+
+    builder.Services.AddScoped<ITraitsExtractor>(sp => new ObservableTraitsExtractor(
+        new AzureOpenAITraitsExtractor(sp.GetRequiredService<ISecretManager>()),
+        sp.GetRequiredService<ILogService>(),
+        sp.GetRequiredService<IMetricsService>(),
+        sp.GetRequiredService<IAlertService>()));
+    builder.Services.AddScoped<IGarmentRepository>(sp => new ObservableGarmentRepository(
+        new SqlGarmentRepository(),
+        sp.GetRequiredService<ILogService>(),
+        sp.GetRequiredService<IMetricsService>()));
     builder.Services.AddScoped<IImageStore, AzureBlobImageStore>();
-    builder.Services.AddScoped<IProfileGenerator, AzureOpenAIProfileGenerator>();
+    builder.Services.AddScoped<IProfileGenerator>(sp => new ObservableProfileGenerator(
+        new AzureOpenAIProfileGenerator(),
+        sp.GetRequiredService<ILogService>(),
+        sp.GetRequiredService<IMetricsService>(),
+        sp.GetRequiredService<IAlertService>()));
     builder.Services.AddScoped<IProfileRepository, SqlProfileRepository>();
-    builder.Services.AddScoped<IRecommender, AzureOpenAIRecommender>();
+    builder.Services.AddScoped<IRecommender>(sp => new ObservableRecommender(
+        new AzureOpenAIRecommender(),
+        sp.GetRequiredService<ILogService>(),
+        sp.GetRequiredService<IMetricsService>(),
+        sp.GetRequiredService<IAlertService>()));
     builder.Services.AddScoped<IInventoryRepository, SqlInventoryRepository>();
 }
 
 var app = builder.Build();
+
+// First in the pipeline so every request — including CORS preflights and 401s —
+// gets a correlation ID and HTTP metrics, before any other middleware can short-circuit it.
+app.UseMiddleware<CorrelationIdMiddleware>();
 
 app.UseSwagger(c =>
 {
