@@ -26,21 +26,26 @@ public class GarmentsController : ControllerBase
         ["image/webp"] = ".webp"
     };
 
+    private const int MaxImagesPerBatch = 10;
+
     private readonly ITraitsExtractor _extractor;
+    private readonly IFashionTraitsExtractor _fashionExtractor;
     private readonly IGarmentRepository _repository;
     private readonly IImageStore _imageStore;
     private readonly ICurrentUser _currentUser;
 
     public GarmentsController(
         ITraitsExtractor extractor,
+        IFashionTraitsExtractor fashionExtractor,
         IGarmentRepository repository,
         IImageStore imageStore,
         ICurrentUser currentUser)
     {
-        _extractor   = extractor;
-        _repository  = repository;
-        _imageStore  = imageStore;
-        _currentUser = currentUser;
+        _extractor        = extractor;
+        _fashionExtractor = fashionExtractor;
+        _repository       = repository;
+        _imageStore       = imageStore;
+        _currentUser      = currentUser;
     }
 
     // ── API #1 ──────────────────────────────────────────────────────────────
@@ -80,6 +85,67 @@ public class GarmentsController : ControllerBase
         catch (GarmentNotDetectedException)
         {
             return UnprocessableEntity(new ErrorResponse("No garment detected in the provided image."));
+        }
+        catch (TraitsParseException ex)
+        {
+            return StatusCode(502, new ErrorResponse("Model returned an invalid response.", ex.Message));
+        }
+        catch (ExtractionException ex)
+        {
+            return StatusCode(502, new ErrorResponse("Model service call failed.", ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// Analyze multiple garment images and extract per-person clothing traits from each.
+    /// </summary>
+    /// <remarks>
+    /// Stateless. Sends all images to the vision model in one call and returns structured
+    /// traits per person per image. Captures multi-person outfits that /analyze cannot.
+    /// No authentication required. No data is persisted.
+    /// </remarks>
+    [HttpPost("analyze-batch")]
+    [ProducesResponseType(typeof(BatchAnalyzeResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ErrorResponse), 502)]
+    public async Task<IActionResult> AnalyzeBatch([FromBody] BatchAnalyzeRequest request, CancellationToken ct)
+    {
+        if (request.Images is null || request.Images.Count == 0)
+            return BadRequest(new ErrorResponse("At least one image is required."));
+
+        if (request.Images.Count > MaxImagesPerBatch)
+            return BadRequest(new ErrorResponse($"A maximum of {MaxImagesPerBatch} images are allowed per request."));
+
+        var inputs = new List<FashionImageInput>();
+        for (int i = 0; i < request.Images.Count; i++)
+        {
+            var img     = request.Images[i];
+            var imageId = string.IsNullOrWhiteSpace(img.ImageId) ? $"img-{i + 1}" : img.ImageId;
+
+            if (string.IsNullOrWhiteSpace(img.ImageBase64))
+                return BadRequest(new ErrorResponse($"Image '{imageId}': imageBase64 is required."));
+
+            byte[] bytes;
+            try { bytes = Convert.FromBase64String(img.ImageBase64); }
+            catch (FormatException) { return BadRequest(new ErrorResponse($"Image '{imageId}': imageBase64 is not valid base64.")); }
+
+            if (bytes.Length > MaxImageBytes)
+                return BadRequest(new ErrorResponse($"Image '{imageId}': exceeds the 10 MB limit."));
+
+            if (img.MimeType is null || !AllowedMimeTypes.Contains(img.MimeType))
+                return BadRequest(new ErrorResponse($"Image '{imageId}': unsupported mimeType '{img.MimeType}'. Allowed: image/jpeg, image/png, image/webp."));
+
+            inputs.Add(new FashionImageInput(imageId, bytes, img.MimeType));
+        }
+
+        try
+        {
+            var result = await _fashionExtractor.ExtractTraitsAsync(inputs, ct);
+            return Ok(new BatchAnalyzeResponse(result.Images, ModelVersion));
+        }
+        catch (ContentFilterException ex)
+        {
+            return StatusCode(502, new ErrorResponse("Content was filtered by the model.", ex.Message));
         }
         catch (TraitsParseException ex)
         {
@@ -214,3 +280,5 @@ public class GarmentsController : ControllerBase
 
 public record AnalyzeRequest(string? ImageBase64, string? MimeType);
 public record CreateGarmentRequest(GarmentTraits? Traits, string? ImageBase64, string? MimeType);
+public record BatchAnalyzeImageRequest(string? ImageId, string? ImageBase64, string? MimeType);
+public record BatchAnalyzeRequest(IReadOnlyList<BatchAnalyzeImageRequest>? Images);

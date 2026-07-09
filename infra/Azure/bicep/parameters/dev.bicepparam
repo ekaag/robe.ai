@@ -7,3 +7,4 @@ param location = 'canadacentral'
 param appServicePlanSkuName = 'F1'
 param appServicePlanSkuTier = 'Free'
 param enablePurgeProtection = false
+param openAiLocation = 'eastus'

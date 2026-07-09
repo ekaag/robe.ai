@@ -38,3 +38,5 @@ public record RecommendationsResponse(
     DateTimeOffset RequestedAt);
 
 public record ErrorResponse(string Error, string? Detail = null);
+
+public record BatchAnalyzeResponse(IReadOnlyList<ImageTraitsResult> Images, string ModelVersion);

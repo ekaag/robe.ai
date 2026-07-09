@@ -1,0 +1,1 @@
+ASPNETCORE_ENVIRONMENT=Dev dotnet run --project robe.api

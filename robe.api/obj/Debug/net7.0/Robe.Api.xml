@@ -18,6 +18,16 @@
             No authentication required. No data is persisted.
             </remarks>
         </member>
+        <member name="M:Robe.Api.Controllers.GarmentsController.AnalyzeBatch(Robe.Api.Controllers.BatchAnalyzeRequest,System.Threading.CancellationToken)">
+            <summary>
+            Analyze multiple garment images and extract per-person clothing traits from each.
+            </summary>
+            <remarks>
+            Stateless. Sends all images to the vision model in one call and returns structured
+            traits per person per image. Captures multi-person outfits that /analyze cannot.
+            No authentication required. No data is persisted.
+            </remarks>
+        </member>
         <member name="M:Robe.Api.Controllers.GarmentsController.Create(Robe.Api.Controllers.CreateGarmentRequest,System.Threading.CancellationToken)">
             <summary>
             Store a new garment with its image and extracted traits.

@@ -125,7 +125,7 @@ builder.Services.AddHttpContextAccessor();
 // Auth — JWT Bearer when Entra config is present; LocalAuthHandler (X-User-Id header)
 // for local dev and integration tests that don't need real tokens.
 var entraAuthority = builder.Configuration["Entra:Authority"];
-var entraClientId  = builder.Configuration["Entra:ClientId"];
+var entraClientId = builder.Configuration["Entra:ClientId"];
 
 if (!useLocalFakes && !string.IsNullOrEmpty(entraAuthority) && !string.IsNullOrEmpty(entraClientId))
 {
@@ -139,7 +139,7 @@ if (!useLocalFakes && !string.IsNullOrEmpty(entraAuthority) && !string.IsNullOrE
         .AddJwtBearer(options =>
         {
             options.Authority = entraAuthority;
-            options.Audience  = entraClientId;
+            options.Audience = entraClientId;
             options.MapInboundClaims = false; // keep raw claim names (sub, oid, name)
             options.TokenValidationParameters = new TokenValidationParameters
             {
@@ -167,7 +167,7 @@ else
     builder.Services.AddAuthentication(o =>
     {
         o.DefaultAuthenticateScheme = LocalAuthHandler.SchemeName;
-        o.DefaultChallengeScheme    = LocalAuthHandler.SchemeName;
+        o.DefaultChallengeScheme = LocalAuthHandler.SchemeName;
     })
     .AddScheme<AuthenticationSchemeOptions, LocalAuthHandler>(LocalAuthHandler.SchemeName, _ => { });
 }
@@ -219,6 +219,7 @@ if (useLocalFakes)
         sp.GetRequiredService<ILogService>(),
         sp.GetRequiredService<IMetricsService>(),
         sp.GetRequiredService<IAlertService>()));
+    builder.Services.AddSingleton<IFashionTraitsExtractor>(FakeFashionTraitsExtractor.ReturnsDefault());
     builder.Services.AddSingleton<IGarmentRepository>(sp => new ObservableGarmentRepository(
         new InMemoryGarmentRepository(),
         sp.GetRequiredService<ILogService>(),
@@ -257,8 +258,9 @@ else
     builder.Services.AddSingleton<IMetricsService, AzureApplicationInsightsMetricsService>();
     builder.Services.AddSingleton<IAlertService, AzureApplicationInsightsAlertService>();
 
+    builder.Services.AddAzureOpenAITraitsExtractor(builder.Configuration);
     builder.Services.AddScoped<ITraitsExtractor>(sp => new ObservableTraitsExtractor(
-        new AzureOpenAITraitsExtractor(sp.GetRequiredService<ISecretManager>()),
+        sp.GetRequiredService<AzureOpenAITraitsExtractor>(),
         sp.GetRequiredService<ILogService>(),
         sp.GetRequiredService<IMetricsService>(),
         sp.GetRequiredService<IAlertService>()));
@@ -311,7 +313,7 @@ app.Use(async (context, next) =>
         log.LogError(ex, "Unhandled exception for {Method} {Path}", context.Request.Method, context.Request.Path);
         if (!context.Response.HasStarted)
         {
-            context.Response.StatusCode  = StatusCodes.Status500InternalServerError;
+            context.Response.StatusCode = StatusCodes.Status500InternalServerError;
             context.Response.ContentType = "application/json";
             var isDev = context.RequestServices.GetRequiredService<IWebHostEnvironment>().IsDevelopment();
             await context.Response.WriteAsJsonAsync(isDev

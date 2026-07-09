@@ -20,7 +20,12 @@
       "Bash(chmod +x dev-create.sh dev-teardown.sh)",
       "Bash(bash -n dev-create.sh)",
       "Bash(bash -n dev-teardown.sh)",
-      "Bash(rm -rf /tmp/robe-publish-check)"
+      "Bash(rm -rf /tmp/robe-publish-check)",
+      "Bash(Get-ChildItem -Path \"c:\\\\code\\\\ekaag\\\\robe.ai\" -Recurse -Directory)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(Sort-Object)",
+      "Read(//c/code/ekaag/robe.api/Controllers/**)",
+      "Read(//c/code/ekaag/robe.api/Models/**)"
     ],
     "additionalDirectories": [
       "\\tmp"

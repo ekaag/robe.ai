@@ -31,7 +31,12 @@ for status.
   "Multi-cloud folder convention" in "Secrets & per-stage cloud config" below
 - DB: Azure SQL (relational) or Cosmos DB (NoSQL) + Azure Blob Storage for images
 - Auth: Microsoft Entra ID — use Entra External ID (formerly Azure AD B2C) for consumer sign-in; JWT bearer tokens
-- LLM / Vision: Azure OpenAI Service, vision-capable model (gpt-4o) via the Chat Completions API
+- LLM / Vision: Azure OpenAI Service, vision-capable model via the Chat Completions API.
+  Current deployment: **gpt-4o/2024-05-13** (GlobalStandard, eastus) — last working gpt-4o version;
+  2024-08-06 and 2024-11-20 are deprecated for new deployments as of July 2026.
+  Upgrade target: **gpt-5.1/2025-11-13** once GlobalStandard quota is available (10 KTPm requested
+  July 2026 via aka.ms/oai/quotaincrease). Bump `visionModelName`/`visionModelVersion` in
+  `infra/Azure/bicep/modules/stage.bicep` to upgrade all stages at once.
 - Secrets: Azure Key Vault, one per deployment stage — see "Secrets & per-stage
   cloud config" below
 - Hosting: Azure App Service (Linux), one per stage (dev/gamma/live) — see
@@ -493,7 +498,48 @@ namespace mirrors its folder (e.g. `Robe.Infrastructure.Persistence.Azure`).
     accruing cost between runs. Run it once you're done. `--yes` skips the
     confirm prompt, `--wait` blocks until the delete finishes, `--purge-vault`
     also purges the soft-deleted `kv-robeai-dev` so the name is reusable
-    immediately instead of staying reserved for up to 90 days.
+    immediately instead of staying reserved for up to 90 days. `--purge-openai`
+    does the same for the Azure OpenAI account (`aoai-robe-dev`) — its custom
+    subdomain is also soft-deleted for 48 hours and causes a `CustomDomainInUse`
+    error on the next `dev-create.sh` if not purged. The script auto-detects
+    the region the account was deployed in, so this works even if `openAiLocation`
+    changed between runs. **Recommended teardown command:**
+    `./dev-teardown.sh --yes --wait --purge-vault --purge-openai`
+
+### Azure OpenAI model versioning
+
+The vision model (used by `AzureOpenAITraitsExtractor` and related implementations) is
+configured in two variables at the top of `infra/Azure/bicep/modules/stage.bicep`:
+
+```bicep
+var visionModelName    = 'gpt-4o'       // model family
+var visionModelVersion = '2024-05-13'   // bump when upgrading
+```
+
+Changing these two lines redeploys all stages to the new version on the next `dev-create.sh`
+or `az deployment` run.
+
+**Region note:** the dev Azure OpenAI account is in `eastus` (set via `openAiLocation = 'eastus'`
+in `parameters/dev.bicepparam`), not `canadacentral` where the App Service and Key Vault live.
+GlobalStandard quota is region-specific and was unavailable in canadacentral for this subscription
+type — eastus has the broadest quota across subscription types.
+
+**Checking available versions** when a deploy fails with `ServiceModelDeprecating`:
+```bash
+az cognitiveservices model list --location eastus -o json \
+  | grep -E '"version"|"name": "gpt-4o"'
+```
+Look for versions without a `replacementConfig` / `autoUpgradeStartDate` already past.
+
+**Known deprecated versions (as of July 2026, new deployments blocked):**
+- `gpt-4o/2024-11-20` — `ServiceModelDeprecating`
+- `gpt-4o/2024-08-06` — `ServiceModelDeprecating`
+
+**Upgrade path:** once GlobalStandard quota for `gpt-5.1` is approved (10 KTPm requested
+July 2026), change `visionModelName = 'gpt-5.1'`, `visionModelVersion = '2025-11-13'`, and
+rename the Azure deployment resource from `'gpt-4o'` to `'gpt-5-1'` in `stage.bicep`.
+The deployment name flows to Key Vault via the `openAiDeploymentName` output and is read
+by the app at runtime — no app code changes needed.
 
 ---
 

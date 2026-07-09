@@ -1,19 +1,20 @@
 #!/usr/bin/env bash
 #
-# Deploys the dev stage end-to-end: resource group, infra (Key Vault, F1 App
-# Service, App Insights), throwaway Key Vault secrets, publishes + deploys the
-# API, then smoke tests the Key Vault / managed identity / RBAC wiring via the
-# unauthenticated POST /api/garments/analyze endpoint.
+# Deploys the dev stage end-to-end:
+#   1. Creates resource group
+#   2. Deploys infra via Bicep: Key Vault, App Service (with managed identity),
+#      Azure OpenAI account + gpt-4o deployment, RBAC grants, App Insights
+#   3. Grants the CLI caller Key Vault Secrets Officer (to write secrets)
+#   4. Reads the OpenAI endpoint from Bicep outputs and writes both OpenAI
+#      secrets into Key Vault (no API key — managed identity authenticates)
+#   5. Publishes and deploys robe.api via zip deploy
+#   6. Waits for the app to come up
+#   7. Smoke tests the full wiring: Key Vault → managed identity → Azure OpenAI
+#      A real OpenAI call is made; success is 200 (traits extracted) or 422
+#      (no garment detected in the tiny PNG) — both prove the round-trip works.
 #
-# Does NOT tear anything down — leaves the stage running so you can iterate /
-# poke at it. Run dev-teardown.sh when you're done to stop accruing cost.
-#
-# This Bicep doesn't provision a real Azure OpenAI resource, so dummy secret
-# values are enough to prove Key Vault wiring works: the analyze call should
-# fail with 502 "Azure OpenAI call failed" (secrets were fetched fine, only
-# the fake OpenAI endpoint failed) rather than 500 (Key Vault/identity/RBAC
-# broken). Override AOAI_ENDPOINT/AOAI_API_KEY/AOAI_DEPLOYMENT to point at a
-# real dev Azure OpenAI resource instead, for a true end-to-end run.
+# Does NOT tear anything down — leaves the stage running so you can iterate.
+# Run dev-teardown.sh when you're done to stop accruing cost.
 #
 # Usage:
 #   ./dev-create.sh [--yes] [--subscription=<id-or-name>]
@@ -40,10 +41,7 @@ LOCATION="canadacentral"
 KEY_VAULT="kv-robeai-dev"
 APP_SERVICE="app-robe-dev"
 APP_URL="https://${APP_SERVICE}.azurewebsites.net"
-
-AOAI_ENDPOINT="${AOAI_ENDPOINT:-https://test.openai.azure.com}"
-AOAI_API_KEY="${AOAI_API_KEY:-test-key}"
-AOAI_DEPLOYMENT="${AOAI_DEPLOYMENT:-gpt-4o}"
+DEPLOY_NAME="robe-dev-infra"
 
 ASSUME_YES=false
 SUBSCRIPTION=""
@@ -187,12 +185,28 @@ fi
 echo "==> [1/7] Creating resource group $RESOURCE_GROUP in $LOCATION..."
 az group create --name "$RESOURCE_GROUP" --location "$LOCATION" --output none
 
-echo "==> [2/7] Deploying dev stage infra (Key Vault, App Service, App Insights)..."
+echo "==> [2/7] Deploying dev stage infra (Key Vault, App Service, Azure OpenAI, App Insights)..."
+# Named deployment so we can read its outputs in the next step.
 az deployment group create \
   --resource-group "$RESOURCE_GROUP" \
+  --name "$DEPLOY_NAME" \
   --template-file "$SCRIPT_DIR/modules/stage.bicep" \
   --parameters "$SCRIPT_DIR/parameters/dev.bicepparam" \
   --output none
+
+echo "    Reading OpenAI endpoint from deployment outputs..."
+AOAI_ENDPOINT="$(az deployment group show \
+  --resource-group "$RESOURCE_GROUP" \
+  --name "$DEPLOY_NAME" \
+  --query "properties.outputs.openAiEndpoint.value" \
+  -o tsv)"
+AOAI_DEPLOYMENT="$(az deployment group show \
+  --resource-group "$RESOURCE_GROUP" \
+  --name "$DEPLOY_NAME" \
+  --query "properties.outputs.openAiDeploymentName.value" \
+  -o tsv)"
+[ -n "$AOAI_ENDPOINT" ] || fail "OpenAI endpoint not found in deployment outputs."
+echo "    OpenAI endpoint: $AOAI_ENDPOINT  deployment: $AOAI_DEPLOYMENT"
 
 echo "==> [3/7] Ensuring caller can write Key Vault secrets..."
 # kv-robeai-dev uses RBAC authorization (enableRbacAuthorization: true), and
@@ -221,9 +235,11 @@ else
   echo "    Already granted."
 fi
 
-echo "==> [4/7] Populating Key Vault secrets..."
+echo "==> [4/7] Writing OpenAI secrets to Key Vault..."
+# The endpoint comes from Bicep outputs (read in step 2); no API key is stored
+# because the App Service managed identity authenticates via the
+# "Cognitive Services OpenAI User" RBAC grant that stage.bicep already created.
 az keyvault secret set --vault-name "$KEY_VAULT" --name "AzureOpenAI--Endpoint" --value "$AOAI_ENDPOINT" --output none
-az keyvault secret set --vault-name "$KEY_VAULT" --name "AzureOpenAI--ApiKey" --value "$AOAI_API_KEY" --output none
 az keyvault secret set --vault-name "$KEY_VAULT" --name "AzureOpenAI--DeploymentName" --value "$AOAI_DEPLOYMENT" --output none
 
 echo "==> [5/7] Publishing and deploying robe.api..."
@@ -245,8 +261,12 @@ done
 [ "$STATUS" = "200" ] || fail "App never came up (last status=$STATUS). Check: az webapp log tail --resource-group $RESOURCE_GROUP --name $APP_SERVICE"
 echo "    App is up (swagger 200)."
 
-echo "==> [7/7] Smoke testing Key Vault wiring via POST /api/garments/analyze..."
-# 1x1 transparent PNG.
+echo "==> [7/7] Smoke testing full wiring: Key Vault → managed identity → Azure OpenAI..."
+# 1x1 transparent PNG — valid image bytes, passes API validation.
+# Expected outcomes (both prove the full round-trip worked):
+#   200 — model extracted traits (unlikely for a 1x1 but possible)
+#   422 — model found no garment/person in the image (most likely)
+# Any 5xx would indicate Key Vault / RBAC / OpenAI wiring failure.
 TINY_PNG_BASE64="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
 
 MAX_ATTEMPTS=4
@@ -257,21 +277,20 @@ for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
   HTTP_CODE="$(echo "$RESPONSE" | tail -n1)"
   BODY="$(echo "$RESPONSE" | sed '$d')"
 
-  if [ "$HTTP_CODE" = "502" ]; then
-    echo "    Got 502 (Azure OpenAI call failed) — expected with dummy secrets."
-    echo "    Proves Key Vault secrets were fetched successfully via managed identity + RBAC."
+  if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "422" ]; then
+    echo "    Got $HTTP_CODE — Azure OpenAI call succeeded."
+    echo "    Key Vault secrets, managed identity, and Cognitive Services OpenAI User RBAC all verified."
     echo ""
     echo "RESULT: PASS"
     break
   fi
 
   if [ "$attempt" -lt "$MAX_ATTEMPTS" ]; then
-    echo "    ($attempt/$MAX_ATTEMPTS) got $HTTP_CODE, not the expected 502 yet — newly granted RBAC"
-    echo "    roles can take a minute to propagate. Retrying in 20s..."
+    echo "    ($attempt/$MAX_ATTEMPTS) got $HTTP_CODE — RBAC grants can take a minute to propagate. Retrying in 20s..."
     sleep 20
   else
     echo "$BODY"
-    fail "Got $HTTP_CODE after $MAX_ATTEMPTS attempts (expected 502). Likely Key Vault/identity/RBAC — see body above."
+    fail "Got $HTTP_CODE after $MAX_ATTEMPTS attempts (expected 200 or 422). Check body above and app logs: az webapp log tail --resource-group $RESOURCE_GROUP --name $APP_SERVICE"
   fi
 done
 
