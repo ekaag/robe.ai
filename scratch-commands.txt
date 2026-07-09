@@ -1,1 +1,21 @@
 ASPNETCORE_ENVIRONMENT=Dev dotnet run --project robe.api
+
+### set up Foundry account and clean it up after model deployment
+
+az group create --name rdev-foundry-rg --location eastus
+
+az cognitiveservices account create --name rdev-foundry-resource --resource-group rdev-foundry-rg --kind AIServices --sku S0 --location eastus --custom-domain rdev-foundry-resource --allow-project-management
+
+az cognitiveservices account project create --name rdev-foundry-resource --resource-group rdev-foundry-rg --project-name rdev-foundry-project --location eastus
+
+az cognitiveservices account show --name rdev-foundry-resource --resource-group rdev-foundry-rg --query properties.provisioningState --output tsv
+
+az cognitiveservices account project show --name rdev-foundry-resource --resource-group rdev-foundry-rg --project-name rdev-foundry-project --query properties.provisioningState --output tsv
+
+az cognitiveservices account deployment create --name rdev-foundry-resource --resource-group rdev-foundry-rg --deployment-name gpt-5.1-mini --model-name gpt-5.1-mini --model-version "2025-04-14" --model-format OpenAI --sku-capacity 10 --sku-name Standard
+
+az cognitiveservices account deployment show --name rdev-foundry-resource --resource-group rdev-foundry-rg --deployment-name gpt-5.1-mini
+
+-------------- Clean up -------------------------
+
+az group delete --name my-foundry-rg --yes --no-wait
