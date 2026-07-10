@@ -1,5 +1,6 @@
 {
-  "platform": {
-    "apiRuntime": "node:18"
+  "navigationFallback": {
+    "rewrite": "/index.html",
+    "exclude": ["/_next/**", "/favicon.ico"]
   }
 }

@@ -126,12 +126,11 @@ SWA_TOKEN="$(az staticwebapp secrets list \
   -o tsv)"
 [ -n "$SWA_TOKEN" ] || fail "Could not retrieve deployment token for $SWA_NAME."
 
-# SWA Standard tier has native Next.js hosting — deploy the regular .next/ output.
-# --output-location is relative to --app-location; SWA serves SSR pages natively
-# without needing a standalone server.js.
+# Static export (output: "export") produces out/ — deploy that directly.
+# No Node runtime needed on SWA; avoids Node 18 vs 20 mismatch and warmup timeouts.
 npx --yes @azure/static-web-apps-cli@latest deploy \
   --app-location "$FRONTEND_DIR" \
-  --output-location ".next" \
+  --output-location "out" \
   --deployment-token "$SWA_TOKEN"
 
 echo ""

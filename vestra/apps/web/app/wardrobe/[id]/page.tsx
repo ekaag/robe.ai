@@ -1,5 +1,11 @@
 "use client";
 
+// Static export: garment IDs are only known at runtime (fetched from the API),
+// so we generate no paths at build time. SWA's navigationFallback serves the
+// root HTML for any unmatched path; the client router then picks up useParams().
+export function generateStaticParams() { return []; }
+export const dynamicParams = false;
+
 import { useParams, useRouter } from "next/navigation";
 import { useGarment } from "@vestra/api";
 import { TraitRow } from "../../../components/TraitRow";
