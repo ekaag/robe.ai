@@ -138,11 +138,10 @@ SWA_TOKEN="$(az staticwebapp secrets list \
   -o tsv)"
 [ -n "$SWA_TOKEN" ] || fail "Could not retrieve deployment token for $SWA_NAME."
 
-# --skip-app-build: we already built above with our custom env vars and pnpm workspace.
-# Point at the nested monorepo path inside standalone (apps/web/), not standalone root.
+# In SWA CLI 2.x, passing the output directory as a positional arg deploys
+# pre-built content without running any build step (--skip-app-build was 1.x only).
 npx --yes @azure/static-web-apps-cli@latest deploy \
-  --app-location "$FRONTEND_DIR/.next/standalone/apps/web" \
-  --skip-app-build \
+  "$FRONTEND_DIR/.next/standalone/apps/web" \
   --deployment-token "$SWA_TOKEN"
 
 echo ""
