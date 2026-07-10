@@ -108,6 +108,7 @@ pnpm install --frozen-lockfile
 # NEXT_PUBLIC_* vars are baked into the JS bundle at build time.
 # Entra vars are optional — if not set, the deployed frontend uses FakeAuthProvider.
 # For gamma/live you almost certainly want real Entra; set the three shell vars above.
+NEXT_OUTPUT="standalone" \
 NEXT_PUBLIC_API_BASE_URL="$APP_URL" \
 NEXT_PUBLIC_ENTRA_REDIRECT_URI="https://${SWA_HOSTNAME}/auth/blank" \
 NEXT_PUBLIC_ENTRA_AUTHORITY="${FRONTEND_ENTRA_AUTHORITY:-}" \
