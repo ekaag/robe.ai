@@ -113,7 +113,13 @@ export NEXT_PUBLIC_ENTRA_REDIRECT_URI="https://${SWA_HOSTNAME}/auth/blank"
 export NEXT_PUBLIC_ENTRA_AUTHORITY="${FRONTEND_ENTRA_AUTHORITY:-}"
 export NEXT_PUBLIC_ENTRA_CLIENT_ID="${FRONTEND_ENTRA_CLIENT_ID:-}"
 export NEXT_PUBLIC_ENTRA_API_SCOPE="${FRONTEND_ENTRA_API_SCOPE:-}"
+echo "==> next.config.mjs output field:"
+grep -E 'output|standalone' "$FRONTEND_DIR/next.config.mjs" || echo "(not found)"
+
 pnpm --filter @vestra/web run build
+
+echo "==> .next/ contents after build:"
+ls -la "$FRONTEND_DIR/.next/" || echo "(no .next dir)"
 
 # Next.js standalone output does not include static assets or public/ — copy them in.
 cp -r "$FRONTEND_DIR/.next/static"  "$FRONTEND_DIR/.next/standalone/.next/static"
