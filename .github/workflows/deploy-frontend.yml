@@ -100,7 +100,6 @@ jobs:
         with:
           azure_static_web_apps_api_token: ${{ steps.cfg.outputs.token }}
           action: upload
-          app_location: vestra/apps/web
-          output_location: out
+          app_location: vestra/apps/web/out
           skip_app_build: true
           skip_api_build: true

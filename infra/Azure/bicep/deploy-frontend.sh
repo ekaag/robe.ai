@@ -126,11 +126,10 @@ SWA_TOKEN="$(az staticwebapp secrets list \
   -o tsv)"
 [ -n "$SWA_TOKEN" ] || fail "Could not retrieve deployment token for $SWA_NAME."
 
-# Static export (output: "export") produces out/ — deploy that directly.
-# No Node runtime needed on SWA; avoids Node 18 vs 20 mismatch and warmup timeouts.
+# Static export (output: "export") produces out/ — point directly at it.
+# skip_app_build ignores output-location; using the out/ dir as app-location is reliable.
 npx --yes @azure/static-web-apps-cli@latest deploy \
-  --app-location "$FRONTEND_DIR" \
-  --output-location "out" \
+  --app-location "$FRONTEND_DIR/out" \
   --deployment-token "$SWA_TOKEN"
 
 echo ""
