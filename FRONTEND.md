@@ -134,14 +134,26 @@ attached:
    signing in for real (Google via CIAM) on the frontend still gives the
    backend your real identity even though the backend isn't doing crypto
    validation.
-2. **`X-User-Id` header** — explicit override, mainly for tests. `FakeAuthProvider`
-   sends this header (value `"dev-user"`) on every request, which is how local
-   dev gets a stable identity without a real token.
+2. **`X-User-Id` header** — explicit override for direct API testing (curl,
+   Swagger "Authorize" → `X-User-Id`). Not used by `FakeAuthProvider` — it
+   sends a fake JWT Bearer token instead (see note below).
 3. **No credentials at all** (no Bearer token, no/blank `X-User-Id`) — returns
    `AuthenticateResult.NoResult()`, so `[Authorize]` returns `401`. There is
    **no implicit fallback identity anymore** — a request truly has to send
-   something to authenticate. If you see unexpected 401s locally, check that
-   `FakeAuthProvider`/the API client is attaching `X-User-Id`.
+   something to authenticate.
+
+**JWT shape requirement**: `FakeAuthProvider.getAccessToken()` returns a minimal
+fake JWT (`header.payload.sig`) so `LocalAuthHandler.TryBuildTicketFromJwt` can
+decode the `sub` claim without signature validation:
+```ts
+// packages/auth/src/FakeAuthProvider.ts
+const payload = btoa(JSON.stringify({ sub: this.currentUser.id, name: "..." }))
+  .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+return `eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.${payload}.fakesig`;
+```
+A plain string like `"fake-access-token"` has no dots, fails the 3-part check,
+and causes a 401 on every API call. If you fork `FakeAuthProvider`, always
+return a properly shaped `header.payload.sig` fake from `getAccessToken()`.
 
 Testing the backend directly (outside the frontend) hits the same requirement:
 hitting `/swagger` locally and clicking "Try it out" with no header also 401s.
@@ -215,7 +227,8 @@ Typed client + TanStack Query hooks, behind an interface so it's mockable.
 ```ts
 interface IApiClient {
   getMe(): Promise<MeUser>;                                      // auth check
-  analyzeGarment(image: ImageInput): Promise<GarmentTraits>;     // API #1
+  analyzeGarment(image: ImageInput): Promise<GarmentTraits>;     // API #1 single
+  analyzeBatch(images: BatchImageInput[]): Promise<BatchAnalyzeResult>; // API #1 batch
   addGarment(input: AddGarmentInput): Promise<Garment>;          // API #2
   listGarments(q?: GarmentQuery): Promise<Garment[]>;            // API #2
   getGarment(id: string): Promise<Garment>;                      // API #2
@@ -238,7 +251,7 @@ interface IApiClient {
   generate and attach one per request later for true end-to-end tracing.
 - Expose **TanStack Query** hooks so screens never call the client directly:
   `useGarments`, `useGarment`, `useAddGarment`, `useDeleteGarment`,
-  `useAnalyzeGarment`, `useStyleProfile`, `useGenerateProfile`,
+  `useAnalyzeGarment`, `useAnalyzeBatch`, `useStyleProfile`, `useGenerateProfile`,
   `useRecommendations`. Server state lives in Query; keep client-only state
   (filters, form drafts) minimal and local.
 - `useRecommendations(ctx, enabled?)` accepts an optional `enabled` flag so the
@@ -249,7 +262,14 @@ interface IApiClient {
   without also reconciling this unwrap.
 - `types` package mirrors the backend DTOs exactly — `GarmentTraits`, `Garment`,
   `StyleProfile`, `InventoryItem`, `RecommendationContext`, `Recommendation`,
-  `MeUser`. Field names match the backend's camelCase JSON serialization:
+  `MeUser`, plus batch-extraction types for `POST /api/garments/analyze-batch`:
+  `BatchImageInput`, `ClothingItemTraitsResult` (richer per-item schema),
+  `PersonTraitsResult` (person grouping with `clothingItems[]`),
+  `ImageTraitsResult` (per-image result with `people[]` and `warnings[]`),
+  `BatchAnalyzeResult` (`images[]` + `modelVersion`). `ClothingItemTraitsResult`
+  uses `category`/`type`/`subtype` (not `GarmentTraits` directly) — `UploadFlow`
+  maps it down via `mapToGarmentTraits()` before calling `addGarment`. Field names
+  match the backend's camelCase JSON serialization:
   - `Garment` includes `modifiedAt`, `createdByUserId`, `modifiedByUserId`
     (matching `GarmentResponse`).
   - `StyleProfile` uses `createdAt`/`modifiedAt` (not `generatedAt`) to match
@@ -288,7 +308,7 @@ mobile = bottom tab bar (Closet / Style / Shop). Both gate everything except
 | `Providers` | `components/Providers.tsx` | QueryClient + auth + API client provider wiring |
 | `AuthGuard` | `components/AuthGuard.tsx` | Route gate; redirects unauthenticated to `/login` |
 | `AppShell` | `components/AppShell.tsx` | Left sidebar nav + account footer + sign-out |
-| `UploadFlow` | `components/UploadFlow.tsx` | Multi-step modal: pick image → analyze → review → save |
+| `UploadFlow` | `components/UploadFlow.tsx` | Multi-step modal supporting single and batch uploads. Single file: pick → analyze → review → save. Batch (2+ files): pick → analyze all → batch-review (per-image/per-person checkboxes) → save selected. Uses `useAnalyzeGarment` for single, `useAnalyzeBatch` for batch. Maps `ClothingItemTraitsResult` → `GarmentTraits` via `mapToGarmentTraits()`. |
 | `GarmentCard` | `components/GarmentCard.tsx` | Grid tile with garment image + primary color badge |
 | `FilterChips` | `components/FilterChips.tsx` | Category filter toggle chips |
 | `AddTile` | `components/AddTile.tsx` | "+" button tile to trigger upload |
@@ -298,6 +318,101 @@ mobile = bottom tab bar (Closet / Style / Shop). Both gate everything except
 | `PaletteStrip` | `components/PaletteStrip.tsx` | Color swatches with weight labels |
 | `ProviderButton` | `components/ProviderButton.tsx` | Social sign-in button |
 | `ScoreBadge` | `components/ScoreBadge.tsx` | Accent pill showing fit score as percentage |
+
+---
+
+## Deployment (local dev + Azure SWA per stage)
+
+### Local dev
+
+Copy `.env.local.example` to `vestra/apps/web/.env.local` before first run.
+The example ships with **Mode 1** (fakes) as the default:
+
+```
+# Mode 1 (default) — local fakes, no Entra tenant needed
+NEXT_PUBLIC_API_BASE_URL=http://localhost:5000
+# leave NEXT_PUBLIC_ENTRA_CLIENT_ID unset → FakeAuthProvider
+```
+
+Mode 2 (real Entra against local API): uncomment the four `NEXT_PUBLIC_ENTRA_*`
+vars. The backend must also have `Entra:Authority` + `Entra:ClientId` set in
+`appsettings.Local.json`. See "Local dev auth bypass" above.
+
+```bash
+# Run backend in local fakes mode (no Azure services):
+ASPNETCORE_ENVIRONMENT=Local dotnet run --project robe.api
+
+# Run frontend:
+cd vestra && pnpm dev
+```
+
+### Azure SWA — build config requirements
+
+Two files in `vestra/apps/web/` are required for SSR deployment to Azure Static
+Web Apps:
+
+- **`next.config.mjs`** — must include `output: "standalone"` so Next.js
+  emits a self-contained Node server in `.next/standalone/`.
+- **`staticwebapp.config.json`** — `{ "platform": { "apiRuntime": "node:18" } }`
+  tells SWA to serve the standalone server as the SSR runtime.
+- **Standard SKU** is required — the Free SKU only supports static export, not
+  Next.js App Router with dynamic routes and SSR.
+
+After `next build`, the standalone output does **not** include static assets:
+copy them manually before deploying:
+```bash
+cp -r .next/static    .next/standalone/.next/static
+cp -r public/         .next/standalone/public
+cp staticwebapp.config.json .next/standalone/
+```
+
+### `NEXT_PUBLIC_*` vars are baked at build time
+
+`NEXT_PUBLIC_*` variables are embedded into the JS bundle during `next build`.
+Azure SWA appsettings are runtime-only for SSR — they will **not** affect the
+client-side bundle. Always inject them as shell env vars before building:
+
+```bash
+NEXT_PUBLIC_API_BASE_URL=https://app-robe-gamma.azurewebsites.net \
+NEXT_PUBLIC_ENTRA_CLIENT_ID=d4cd6bf9-9a9e-44e6-b7e5-12660e5e32d9 \
+...
+  pnpm --filter @vestra/web run build
+```
+
+### `deploy-frontend.sh` — multi-stage deploy script
+
+`infra/Azure/bicep/deploy-frontend.sh` handles build + SWA deploy for any stage.
+Prereq: the stage's Bicep infra (SWA resource) must already exist.
+
+```bash
+cd infra/Azure/bicep
+
+# Dev frontend (uses FakeAuthProvider — no Entra env vars needed):
+./deploy-frontend.sh --stage=dev --yes
+
+# Gamma/live frontend (with real Entra):
+export FRONTEND_ENTRA_AUTHORITY="https://vestraoauth.ciamlogin.com/vestraoauth.onmicrosoft.com"
+export FRONTEND_ENTRA_CLIENT_ID="d4cd6bf9-9a9e-44e6-b7e5-12660e5e32d9"
+export FRONTEND_ENTRA_API_SCOPE="api://d4cd6bf9-9a9e-44e6-b7e5-12660e5e32d9/access_as_user"
+./deploy-frontend.sh --stage=gamma --yes
+./deploy-frontend.sh --stage=live  --yes
+```
+
+The script: reads the SWA hostname via `az staticwebapp show`, runs
+`pnpm install --frozen-lockfile` + `pnpm --filter @vestra/web run build` with
+the correct env vars, copies static assets into standalone, retrieves the SWA
+deployment token, and runs `@azure/static-web-apps-cli deploy --skip-app-build`.
+
+API endpoints baked in per stage:
+| Stage | API | SWA URL |
+|---|---|---|
+| dev | `https://app-robe-dev.azurewebsites.net` | `https://swa-robe-dev.<hash>.azurestaticapps.net` |
+| gamma | `https://app-robe-gamma.azurewebsites.net` | `https://swa-robe-gamma.<hash>.azurestaticapps.net` |
+| live | `https://app-robe-live.azurewebsites.net` | `https://swa-robe-live.<hash>.azurestaticapps.net` |
+
+For the full dev stage end-to-end (infra + backend + frontend in one command),
+use `dev-create.sh` instead — it calls `deploy-frontend.sh` internally. See
+`scratch-commands.txt` for all deploy commands with flags.
 
 ---
 
