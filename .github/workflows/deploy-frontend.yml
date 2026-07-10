@@ -1,0 +1,108 @@
+name: Deploy Frontend
+
+# Automatically deploys the dev frontend when vestra/ changes land on main.
+# Use workflow_dispatch to manually target gamma or live.
+#
+# Prerequisites (one-time setup per environment):
+#   1. Create an Azure service principal with Contributor access to the stage's resource group.
+#   2. Add a federated credential on the app registration so GitHub can mint OIDC tokens for it.
+#   3. In GitHub → Settings → Environments, create environments named "dev", "gamma", "live".
+#      Each environment needs these secrets:
+#        AZURE_CLIENT_ID       — the app registration client ID
+#        AZURE_TENANT_ID       — your Entra tenant ID
+#        AZURE_SUBSCRIPTION_ID — the Azure subscription ID
+#      And optionally these variables (leave empty on dev to use FakeAuthProvider):
+#        FRONTEND_ENTRA_AUTHORITY  — e.g. https://vestraoauth.ciamlogin.com/...
+#        FRONTEND_ENTRA_CLIENT_ID  — e.g. d4cd6bf9-...
+#        FRONTEND_ENTRA_API_SCOPE  — e.g. api://d4cd6bf9-.../access_as_user
+#
+# Creating the service principal + federated credential (run once, repeat per stage
+# or share one SP across all three — see AZURE_CLIENT_ID comments in each environment):
+#
+#   az ad sp create-for-rbac --name "sp-robe-github-deploy" \
+#     --role Contributor \
+#     --scopes /subscriptions/<SUB_ID>
+#
+#   Subscription scope (not resource-group scope) is intentional: the resource
+#   groups are ephemeral — dev-create.sh creates them and dev-teardown.sh deletes
+#   them. Subscription-level Contributor lets the SP work regardless of which
+#   groups exist at any given moment, and it's the scope dev-create.sh itself
+#   requires (az deployment sub create is a subscription-level operation).
+#
+#   az ad app federated-credential create --id <APP_ID> --parameters '{
+#     "name": "robe-github-main",
+#     "issuer": "https://token.actions.githubusercontent.com",
+#     "subject": "repo:ekaag/robe.ai:ref:refs/heads/main",
+#     "audiences": ["api://AzureADTokenExchange"]
+#   }'
+#
+# For workflow_dispatch from non-main branches (e.g. feature testing), add a second
+# federated credential with subject "repo:ekaag/robe.ai:ref:refs/heads/<branch>",
+# or use the wildcard subject pattern "repo:ekaag/robe.ai:*" (less restrictive).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'vestra/**'
+      - 'infra/Azure/bicep/deploy-frontend.sh'
+      - '.github/workflows/deploy-frontend.yml'
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: 'Target stage'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - gamma
+          - live
+
+# One deploy per stage at a time — no parallel deploys to the same SWA.
+# cancel-in-progress: false means a queued run waits; the in-flight deploy finishes cleanly.
+concurrency:
+  group: deploy-frontend-${{ github.event.inputs.stage || 'dev' }}
+  cancel-in-progress: false
+
+permissions:
+  id-token: write  # required for OIDC token exchange with Azure
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy ${{ github.event.inputs.stage || 'dev' }}
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.stage || 'dev' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Build & deploy frontend
+        env:
+          # Entra vars are optional — empty = FakeAuthProvider (fine for dev).
+          # Set them in the GitHub Environment for gamma/live.
+          FRONTEND_ENTRA_AUTHORITY: ${{ vars.FRONTEND_ENTRA_AUTHORITY }}
+          FRONTEND_ENTRA_CLIENT_ID: ${{ vars.FRONTEND_ENTRA_CLIENT_ID }}
+          FRONTEND_ENTRA_API_SCOPE: ${{ vars.FRONTEND_ENTRA_API_SCOPE }}
+        run: |
+          chmod +x infra/Azure/bicep/deploy-frontend.sh
+          ./infra/Azure/bicep/deploy-frontend.sh \
+            --stage=${{ github.event.inputs.stage || 'dev' }} \
+            --yes
