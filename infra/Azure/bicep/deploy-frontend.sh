@@ -120,6 +120,10 @@ pnpm --filter @vestra/web run build
 
 echo "==> .next/ contents after build:"
 ls -la "$FRONTEND_DIR/.next/" || echo "(no .next dir)"
+echo "==> .next/standalone/ contents:"
+ls -la "$FRONTEND_DIR/.next/standalone/" || echo "(no standalone dir)"
+echo "==> .next/standalone/ tree (2 levels):"
+find "$FRONTEND_DIR/.next/standalone" -maxdepth 2 -not -path "*/node_modules/*" | sort || true
 
 # Next.js standalone output does not include static assets or public/ — copy them in.
 cp -r "$FRONTEND_DIR/.next/static"  "$FRONTEND_DIR/.next/standalone/.next/static"
