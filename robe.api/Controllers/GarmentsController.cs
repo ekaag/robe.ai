@@ -17,7 +17,7 @@ public class GarmentsController : ControllerBase
 {
     private const int MaxImageBytes = 10 * 1024 * 1024;
     private static readonly string[] AllowedMimeTypes = new[] { "image/jpeg", "image/png", "image/webp" };
-    private const string ModelVersion = "azure-openai-gpt-4o";
+    private const string ModelVersion = "azure-openai-gpt-5-mini";
 
     private static readonly Dictionary<string, string> MimeToExtension = new()
     {

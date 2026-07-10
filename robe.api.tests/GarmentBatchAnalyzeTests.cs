@@ -50,7 +50,7 @@ public class GarmentBatchAnalyzeTests : IClassFixture<WebApplicationFactory<Prog
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var json = await response.Content.ReadFromJsonAsync<JsonElement>();
-        Assert.Equal("azure-openai-gpt-4o", json.GetProperty("modelVersion").GetString());
+        Assert.Equal("azure-openai-gpt-5-mini", json.GetProperty("modelVersion").GetString());
         var images = json.GetProperty("images");
         Assert.Equal(2, images.GetArrayLength());
         Assert.Equal("img-a", images[0].GetProperty("imageId").GetString());

@@ -32,10 +32,10 @@ for status.
 - DB: Azure SQL (relational) or Cosmos DB (NoSQL) + Azure Blob Storage for images
 - Auth: Microsoft Entra ID — use Entra External ID (formerly Azure AD B2C) for consumer sign-in; JWT bearer tokens
 - LLM / Vision: Azure OpenAI Service, vision-capable model via the Chat Completions API.
-  Current deployment: **gpt-4o/2024-05-13** (GlobalStandard, eastus) — last working gpt-4o version;
-  2024-08-06 and 2024-11-20 are deprecated for new deployments as of July 2026.
-  Upgrade target: **gpt-5.1/2025-11-13** once GlobalStandard quota is available (10 KTPm requested
-  July 2026 via aka.ms/oai/quotaincrease). Bump `visionModelName`/`visionModelVersion` in
+  Current deployment: **gpt-5-mini/2025-08-07** (GlobalStandard, eastus) — vision-capable,
+  cost-efficient, strong instruction following for structured JSON extraction. All gpt-4o and
+  gpt-4.1 versions were deprecated for new deployments as of July 2026 (gpt-4.1/2025-04-14
+  entered deprecating state July 2026). Bump `visionModelName`/`visionModelVersion` in
   `infra/Azure/bicep/modules/stage.bicep` to upgrade all stages at once.
 - Secrets: Azure Key Vault, one per deployment stage — see "Secrets & per-stage
   cloud config" below
@@ -512,12 +512,13 @@ The vision model (used by `AzureOpenAITraitsExtractor` and related implementatio
 configured in two variables at the top of `infra/Azure/bicep/modules/stage.bicep`:
 
 ```bicep
-var visionModelName    = 'gpt-4o'       // model family
-var visionModelVersion = '2024-05-13'   // bump when upgrading
+var visionModelName    = 'gpt-5-mini'   // model family
+var visionModelVersion = '2025-08-07'   // bump when upgrading
 ```
 
-Changing these two lines redeploys all stages to the new version on the next `dev-create.sh`
-or `az deployment` run.
+The deployment resource name in `stage.bicep` is `'gpt-5-mini'`. Changing these two lines +
+renaming the deployment resource redeploys all stages on the next `dev-create.sh` or
+`az deployment` run.
 
 **Region note:** the dev Azure OpenAI account is in `eastus` (set via `openAiLocation = 'eastus'`
 in `parameters/dev.bicepparam`), not `canadacentral` where the App Service and Key Vault live.
@@ -527,19 +528,13 @@ type — eastus has the broadest quota across subscription types.
 **Checking available versions** when a deploy fails with `ServiceModelDeprecating`:
 ```bash
 az cognitiveservices model list --location eastus -o json \
-  | grep -E '"version"|"name": "gpt-4o"'
+  | python3 -c "import json,sys; [print(m['model']['name'], m['model']['version']) for m in json.load(sys.stdin) if 'gpt-5' in m.get('model',{}).get('name','')]" | sort -u
 ```
 Look for versions without a `replacementConfig` / `autoUpgradeStartDate` already past.
 
-**Known deprecated versions (as of July 2026, new deployments blocked):**
-- `gpt-4o/2024-11-20` — `ServiceModelDeprecating`
-- `gpt-4o/2024-08-06` — `ServiceModelDeprecating`
-
-**Upgrade path:** once GlobalStandard quota for `gpt-5.1` is approved (10 KTPm requested
-July 2026), change `visionModelName = 'gpt-5.1'`, `visionModelVersion = '2025-11-13'`, and
-rename the Azure deployment resource from `'gpt-4o'` to `'gpt-5-1'` in `stage.bicep`.
-The deployment name flows to Key Vault via the `openAiDeploymentName` output and is read
-by the app at runtime — no app code changes needed.
+**Known deprecated model versions (new deployments blocked as of July 2026):**
+- `gpt-4o/2024-11-20`, `gpt-4o/2024-08-06`, `gpt-4o/2024-05-13` — all `ServiceModelDeprecating`
+- `gpt-4.1/2025-04-14` — entered deprecating state July 2026
 
 ---
 
@@ -625,13 +620,13 @@ Request (multipart/form-data **or** JSON with base64):
 
 Response `200`:
 ```jsonc
-{ "traits": { /* GarmentTraits object */ }, "modelVersion": "azure-openai-gpt-4o" }
+{ "traits": { /* GarmentTraits object */ }, "modelVersion": "azure-openai-gpt-4.1" }
 ```
 
 Errors: `400` (bad/missing image), `422` (no garment detected), `502` (model
 call failed).
 
-Implementation notes: send the image to the Azure OpenAI vision model (gpt-4o)
+Implementation notes: send the image to the Azure OpenAI vision model (gpt-4.1)
 via the Chat Completions API, using **JSON mode / structured outputs** with a
 prompt that demands JSON matching the GarmentTraits schema and nothing else;
 still parse defensively (strip any code fences, validate against the schema,

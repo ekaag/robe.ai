@@ -2,7 +2,7 @@
 // populated out-of-band — never via this template), a Windows App Service (Linux
 // App Service Plans hit quota/availability limits on Free-tier SKUs) with a
 // system-assigned managed identity granted "Key Vault Secrets User" on its own
-// vault only, an Azure OpenAI account with a gpt-4o deployment, a
+// vault only, an Azure OpenAI account with a gpt-5-mini deployment, a
 // "Cognitive Services OpenAI User" grant from the App Service identity to the
 // OpenAI account (enables DefaultAzureCredential — no API key needed), and
 // Application Insights wired into the App Service's connection string app setting.
@@ -43,11 +43,10 @@ var cognitiveServicesOpenAiUserRoleId = '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd'
 var aspnetEnvironmentName = '${toUpper(take(stageName, 1))}${skip(stageName, 1)}'
 
 // Vision model deployed in every stage. Bump version here to upgrade all stages at once.
-// 2024-11-20 is deprecated for new deployments; 2024-08-06 is the newest usable version
-// on this subscription's gpt-4o GlobalStandard quota. Upgrade to gpt-5.1 once quota is
-// requested via https://aka.ms/oai/quotaincrease.
-var visionModelName = 'gpt-4o'
-var visionModelVersion = '2024-05-13'
+// Using gpt-5-mini (August 2025) — vision-capable, cost-efficient, strong instruction
+// following for structured JSON extraction.
+var visionModelName = 'gpt-5-mini'
+var visionModelVersion = '2025-08-07'
 
 resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   name: 'kv-robeai-${stageName}'
@@ -141,7 +140,7 @@ resource openAiAccount 'Microsoft.CognitiveServices/accounts@2023-05-01' = {
 // as AzureOpenAI--DeploymentName by dev-create.sh so the app resolves it at runtime.
 resource visionModelDeployment 'Microsoft.CognitiveServices/accounts/deployments@2023-05-01' = {
   parent: openAiAccount
-  name: 'gpt-4o'
+  name: 'gpt-5-mini'
   sku: {
     name: 'GlobalStandard'
     capacity: openAiModelCapacityK

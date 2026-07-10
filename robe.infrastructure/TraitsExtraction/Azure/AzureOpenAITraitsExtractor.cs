@@ -10,7 +10,7 @@ using Robe.Core.Interfaces;
 namespace Robe.Infrastructure.TraitsExtraction.Azure;
 
 /// <summary>
-/// Production traits extractor backed by an Azure OpenAI vision model (gpt-4o or later).
+/// Production traits extractor backed by an Azure OpenAI vision model (gpt-4.1 or later).
 ///
 /// Implements two interfaces:
 ///   <see cref="ITraitsExtractor"/>        — single garment image → <see cref="GarmentTraits"/> (existing API #1)

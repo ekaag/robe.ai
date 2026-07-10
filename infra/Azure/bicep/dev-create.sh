@@ -3,7 +3,7 @@
 # Deploys the dev stage end-to-end:
 #   1. Creates resource group
 #   2. Deploys infra via Bicep: Key Vault, App Service (with managed identity),
-#      Azure OpenAI account + gpt-4o deployment, RBAC grants, App Insights
+#      Azure OpenAI account + gpt-4.1 deployment, RBAC grants, App Insights
 #   3. Grants the CLI caller Key Vault Secrets Officer (to write secrets)
 #   4. Reads the OpenAI endpoint from Bicep outputs and writes both OpenAI
 #      secrets into Key Vault (no API key — managed identity authenticates)
