@@ -4,8 +4,8 @@ name: Deploy Frontend
 # Use workflow_dispatch to manually target gamma or live.
 #
 # Prerequisites (one-time setup per environment):
-#   1. Create an Azure service principal with Contributor access to the stage's resource group.
-#   2. Add a federated credential on the app registration so GitHub can mint OIDC tokens for it.
+#   1. Create an Azure service principal with Contributor access to the subscription.
+#   2. Add a federated credential per environment (subject: repo:ekaag/robe.ai:environment:<name>).
 #   3. In GitHub → Settings → Environments, create environments named "dev", "gamma", "live".
 #      Each environment needs these secrets:
 #        AZURE_CLIENT_ID       — the app registration client ID
@@ -15,37 +15,12 @@ name: Deploy Frontend
 #        FRONTEND_ENTRA_AUTHORITY  — e.g. https://vestraoauth.ciamlogin.com/...
 #        FRONTEND_ENTRA_CLIENT_ID  — e.g. d4cd6bf9-...
 #        FRONTEND_ENTRA_API_SCOPE  — e.g. api://d4cd6bf9-.../access_as_user
-#
-# Creating the service principal + federated credential (run once, repeat per stage
-# or share one SP across all three — see AZURE_CLIENT_ID comments in each environment):
-#
-#   az ad sp create-for-rbac --name "sp-robe-github-deploy" \
-#     --role Contributor \
-#     --scopes /subscriptions/<SUB_ID>
-#
-#   Subscription scope (not resource-group scope) is intentional: the resource
-#   groups are ephemeral — dev-create.sh creates them and dev-teardown.sh deletes
-#   them. Subscription-level Contributor lets the SP work regardless of which
-#   groups exist at any given moment, and it's the scope dev-create.sh itself
-#   requires (az deployment sub create is a subscription-level operation).
-#
-#   az ad app federated-credential create --id <APP_ID> --parameters '{
-#     "name": "robe-github-main",
-#     "issuer": "https://token.actions.githubusercontent.com",
-#     "subject": "repo:ekaag/robe.ai:ref:refs/heads/main",
-#     "audiences": ["api://AzureADTokenExchange"]
-#   }'
-#
-# For workflow_dispatch from non-main branches (e.g. feature testing), add a second
-# federated credential with subject "repo:ekaag/robe.ai:ref:refs/heads/<branch>",
-# or use the wildcard subject pattern "repo:ekaag/robe.ai:*" (less restrictive).
 
 on:
   push:
     branches: [main]
     paths:
       - 'vestra/**'
-      - 'infra/Azure/bicep/deploy-frontend.sh'
       - '.github/workflows/deploy-frontend.yml'
   workflow_dispatch:
     inputs:
@@ -60,7 +35,6 @@ on:
           - live
 
 # One deploy per stage at a time — no parallel deploys to the same SWA.
-# cancel-in-progress: false means a queued run waits; the in-flight deploy finishes cleanly.
 concurrency:
   group: deploy-frontend-${{ github.event.inputs.stage || 'dev' }}
   cancel-in-progress: false
@@ -94,15 +68,39 @@ jobs:
       - name: Install pnpm
         run: npm install -g pnpm
 
-      - name: Build & deploy frontend
-        env:
-          # Entra vars are optional — empty = FakeAuthProvider (fine for dev).
-          # Set them in the GitHub Environment for gamma/live.
-          FRONTEND_ENTRA_AUTHORITY: ${{ vars.FRONTEND_ENTRA_AUTHORITY }}
-          FRONTEND_ENTRA_CLIENT_ID: ${{ vars.FRONTEND_ENTRA_CLIENT_ID }}
-          FRONTEND_ENTRA_API_SCOPE: ${{ vars.FRONTEND_ENTRA_API_SCOPE }}
+      - name: Resolve stage config
+        id: cfg
         run: |
-          chmod +x infra/Azure/bicep/deploy-frontend.sh
-          ./infra/Azure/bicep/deploy-frontend.sh \
-            --stage=${{ github.event.inputs.stage || 'dev' }} \
-            --yes
+          STAGE="${{ github.event.inputs.stage || 'dev' }}"
+          SWA_NAME="swa-robe-${STAGE}"
+          RG="rg-robe-${STAGE}"
+          APP_URL="https://app-robe-${STAGE}.azurewebsites.net"
+          HOSTNAME=$(az staticwebapp show --name "$SWA_NAME" --resource-group "$RG" \
+            --query defaultHostname -o tsv)
+          TOKEN=$(az staticwebapp secrets list --name "$SWA_NAME" --resource-group "$RG" \
+            --query "properties.apiKey" -o tsv)
+          echo "hostname=$HOSTNAME"   >> $GITHUB_OUTPUT
+          echo "token=$TOKEN"         >> $GITHUB_OUTPUT
+          echo "app_url=$APP_URL"     >> $GITHUB_OUTPUT
+
+      - name: Build Next.js
+        env:
+          NEXT_PUBLIC_API_BASE_URL: ${{ steps.cfg.outputs.app_url }}
+          NEXT_PUBLIC_ENTRA_REDIRECT_URI: https://${{ steps.cfg.outputs.hostname }}/auth/blank
+          NEXT_PUBLIC_ENTRA_AUTHORITY: ${{ vars.FRONTEND_ENTRA_AUTHORITY }}
+          NEXT_PUBLIC_ENTRA_CLIENT_ID: ${{ vars.FRONTEND_ENTRA_CLIENT_ID }}
+          NEXT_PUBLIC_ENTRA_API_SCOPE: ${{ vars.FRONTEND_ENTRA_API_SCOPE }}
+        run: |
+          cd vestra
+          pnpm install --frozen-lockfile
+          pnpm --filter @vestra/web run build
+
+      - name: Deploy to Azure SWA
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ steps.cfg.outputs.token }}
+          action: upload
+          app_location: vestra/apps/web
+          output_location: .next
+          skip_app_build: true
+          skip_api_build: true

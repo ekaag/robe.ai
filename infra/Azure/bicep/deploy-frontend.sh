@@ -89,7 +89,7 @@ fi
 
 # ── Step 1: build ─────────────────────────────────────────────────────────────
 
-echo "==> [1/2] Building Next.js standalone..."
+echo "==> [1/2] Building Next.js..."
 
 # Read the SWA hostname so NEXT_PUBLIC_ENTRA_REDIRECT_URI is correct for this stage.
 SWA_HOSTNAME="$(az staticwebapp show \
@@ -108,24 +108,12 @@ pnpm install --frozen-lockfile
 # NEXT_PUBLIC_* vars are baked into the JS bundle at build time.
 # Entra vars are optional — if not set, the deployed frontend uses FakeAuthProvider.
 # For gamma/live you almost certainly want real Entra; set the three shell vars above.
-export NEXT_PUBLIC_API_BASE_URL="$APP_URL"
-export NEXT_PUBLIC_ENTRA_REDIRECT_URI="https://${SWA_HOSTNAME}/auth/blank"
-export NEXT_PUBLIC_ENTRA_AUTHORITY="${FRONTEND_ENTRA_AUTHORITY:-}"
-export NEXT_PUBLIC_ENTRA_CLIENT_ID="${FRONTEND_ENTRA_CLIENT_ID:-}"
-export NEXT_PUBLIC_ENTRA_API_SCOPE="${FRONTEND_ENTRA_API_SCOPE:-}"
-echo "==> next.config.mjs output field:"
-grep -E 'output|standalone' "$FRONTEND_DIR/next.config.mjs" || echo "(not found)"
-
-pnpm --filter @vestra/web run build
-
-# In a pnpm monorepo, Next.js nests the standalone output under the workspace-relative
-# path (apps/web/) rather than at the root of standalone/. Copy static assets into
-# that nested path, not into standalone/ directly.
-STANDALONE_APP="$FRONTEND_DIR/.next/standalone/apps/web"
-cp -r "$FRONTEND_DIR/.next/static"  "$STANDALONE_APP/.next/static"
-[ -d "$FRONTEND_DIR/public" ] \
-  && cp -r "$FRONTEND_DIR/public" "$STANDALONE_APP/public"
-cp "$FRONTEND_DIR/staticwebapp.config.json" "$STANDALONE_APP/staticwebapp.config.json"
+NEXT_PUBLIC_API_BASE_URL="$APP_URL" \
+NEXT_PUBLIC_ENTRA_REDIRECT_URI="https://${SWA_HOSTNAME}/auth/blank" \
+NEXT_PUBLIC_ENTRA_AUTHORITY="${FRONTEND_ENTRA_AUTHORITY:-}" \
+NEXT_PUBLIC_ENTRA_CLIENT_ID="${FRONTEND_ENTRA_CLIENT_ID:-}" \
+NEXT_PUBLIC_ENTRA_API_SCOPE="${FRONTEND_ENTRA_API_SCOPE:-}" \
+  pnpm --filter @vestra/web run build
 
 # ── Step 2: deploy ────────────────────────────────────────────────────────────
 
@@ -138,10 +126,12 @@ SWA_TOKEN="$(az staticwebapp secrets list \
   -o tsv)"
 [ -n "$SWA_TOKEN" ] || fail "Could not retrieve deployment token for $SWA_NAME."
 
-# In SWA CLI 2.x, passing the output directory as a positional arg deploys
-# pre-built content without running any build step (--skip-app-build was 1.x only).
+# SWA Standard tier has native Next.js hosting — deploy the regular .next/ output.
+# --output-location is relative to --app-location; SWA serves SSR pages natively
+# without needing a standalone server.js.
 npx --yes @azure/static-web-apps-cli@latest deploy \
-  "$FRONTEND_DIR/.next/standalone/apps/web" \
+  --app-location "$FRONTEND_DIR" \
+  --output-location ".next" \
   --deployment-token "$SWA_TOKEN"
 
 echo ""
