@@ -108,13 +108,14 @@ pnpm install --frozen-lockfile
 # NEXT_PUBLIC_* vars are baked into the JS bundle at build time.
 # Entra vars are optional — if not set, the deployed frontend uses FakeAuthProvider.
 # For gamma/live you almost certainly want real Entra; set the three shell vars above.
-NEXT_OUTPUT="standalone" \
-NEXT_PUBLIC_API_BASE_URL="$APP_URL" \
-NEXT_PUBLIC_ENTRA_REDIRECT_URI="https://${SWA_HOSTNAME}/auth/blank" \
-NEXT_PUBLIC_ENTRA_AUTHORITY="${FRONTEND_ENTRA_AUTHORITY:-}" \
-NEXT_PUBLIC_ENTRA_CLIENT_ID="${FRONTEND_ENTRA_CLIENT_ID:-}" \
-NEXT_PUBLIC_ENTRA_API_SCOPE="${FRONTEND_ENTRA_API_SCOPE:-}" \
-  pnpm --filter @vestra/web run build
+# export (not inline assignment) so pnpm's child next process inherits these vars.
+export NEXT_OUTPUT="standalone"
+export NEXT_PUBLIC_API_BASE_URL="$APP_URL"
+export NEXT_PUBLIC_ENTRA_REDIRECT_URI="https://${SWA_HOSTNAME}/auth/blank"
+export NEXT_PUBLIC_ENTRA_AUTHORITY="${FRONTEND_ENTRA_AUTHORITY:-}"
+export NEXT_PUBLIC_ENTRA_CLIENT_ID="${FRONTEND_ENTRA_CLIENT_ID:-}"
+export NEXT_PUBLIC_ENTRA_API_SCOPE="${FRONTEND_ENTRA_API_SCOPE:-}"
+pnpm --filter @vestra/web run build
 
 # Next.js standalone output does not include static assets or public/ — copy them in.
 cp -r "$FRONTEND_DIR/.next/static"  "$FRONTEND_DIR/.next/standalone/.next/static"

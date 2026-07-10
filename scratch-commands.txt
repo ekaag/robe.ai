@@ -61,13 +61,15 @@ az ad sp create-for-rbac --name "sp-robe-github-deploy" \
   --role Contributor \
   --scopes /subscriptions/c3b2ab0c-a402-4b3a-aed1-c62aca631c9e
 
-# 2. Add federated credential (GitHub Actions on main branch can mint OIDC tokens)
-az ad app federated-credential create --id 635defe9-b887-4fd9-abed-febf95746c2e --parameters '{
-  "name": "robe-github-main",
-  "issuer": "https://token.actions.githubusercontent.com",
-  "subject": "repo:ekaag/robe.ai:ref:refs/heads/main",
-  "audiences": ["api://AzureADTokenExchange"]
-}'
+# 2. Add federated credentials — one per environment (subject must match exactly;
+#    when a job uses environment: dev/gamma/live the OIDC subject becomes
+#    repo:ekaag/robe.ai:environment:<name>, not ref:refs/heads/main).
+#    Run in PowerShell (not Git Bash — avoid path mangling on the JSON):
+az ad app federated-credential create --id 635defe9-b887-4fd9-abed-febf95746c2e --parameters '{\"name\":\"robe-github-env-dev\",\"issuer\":\"https://token.actions.githubusercontent.com\",\"subject\":\"repo:ekaag/robe.ai:environment:dev\",\"audiences\":[\"api://AzureADTokenExchange\"]}'
+az ad app federated-credential create --id 635defe9-b887-4fd9-abed-febf95746c2e --parameters '{\"name\":\"robe-github-env-gamma\",\"issuer\":\"https://token.actions.githubusercontent.com\",\"subject\":\"repo:ekaag/robe.ai:environment:gamma\",\"audiences\":[\"api://AzureADTokenExchange\"]}'
+az ad app federated-credential create --id 635defe9-b887-4fd9-abed-febf95746c2e --parameters '{\"name\":\"robe-github-env-live\",\"issuer\":\"https://token.actions.githubusercontent.com\",\"subject\":\"repo:ekaag/robe.ai:environment:live\",\"audiences\":[\"api://AzureADTokenExchange\"]}'
+# The ref:refs/heads/main credential below covers push-triggered runs (no environment scope):
+az ad app federated-credential create --id 635defe9-b887-4fd9-abed-febf95746c2e --parameters '{\"name\":\"robe-github-main\",\"issuer\":\"https://token.actions.githubusercontent.com\",\"subject\":\"repo:ekaag/robe.ai:ref:refs/heads/main\",\"audiences\":[\"api://AzureADTokenExchange\"]}'
 
 # 3. GitHub → Settings → Environments → create: dev, gamma, live
 #    Add secrets to each environment:
