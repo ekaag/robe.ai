@@ -118,18 +118,14 @@ grep -E 'output|standalone' "$FRONTEND_DIR/next.config.mjs" || echo "(not found)
 
 pnpm --filter @vestra/web run build
 
-echo "==> .next/ contents after build:"
-ls -la "$FRONTEND_DIR/.next/" || echo "(no .next dir)"
-echo "==> .next/standalone/ contents:"
-ls -la "$FRONTEND_DIR/.next/standalone/" || echo "(no standalone dir)"
-echo "==> .next/standalone/ tree (2 levels):"
-find "$FRONTEND_DIR/.next/standalone" -maxdepth 2 -not -path "*/node_modules/*" | sort || true
-
-# Next.js standalone output does not include static assets or public/ — copy them in.
-cp -r "$FRONTEND_DIR/.next/static"  "$FRONTEND_DIR/.next/standalone/.next/static"
+# In a pnpm monorepo, Next.js nests the standalone output under the workspace-relative
+# path (apps/web/) rather than at the root of standalone/. Copy static assets into
+# that nested path, not into standalone/ directly.
+STANDALONE_APP="$FRONTEND_DIR/.next/standalone/apps/web"
+cp -r "$FRONTEND_DIR/.next/static"  "$STANDALONE_APP/.next/static"
 [ -d "$FRONTEND_DIR/public" ] \
-  && cp -r "$FRONTEND_DIR/public" "$FRONTEND_DIR/.next/standalone/public"
-cp "$FRONTEND_DIR/staticwebapp.config.json" "$FRONTEND_DIR/.next/standalone/staticwebapp.config.json"
+  && cp -r "$FRONTEND_DIR/public" "$STANDALONE_APP/public"
+cp "$FRONTEND_DIR/staticwebapp.config.json" "$STANDALONE_APP/staticwebapp.config.json"
 
 # ── Step 2: deploy ────────────────────────────────────────────────────────────
 
@@ -143,8 +139,9 @@ SWA_TOKEN="$(az staticwebapp secrets list \
 [ -n "$SWA_TOKEN" ] || fail "Could not retrieve deployment token for $SWA_NAME."
 
 # --skip-app-build: we already built above with our custom env vars and pnpm workspace.
+# Point at the nested monorepo path inside standalone (apps/web/), not standalone root.
 npx --yes @azure/static-web-apps-cli@latest deploy \
-  --app-location "$FRONTEND_DIR/.next/standalone" \
+  --app-location "$FRONTEND_DIR/.next/standalone/apps/web" \
   --skip-app-build \
   --deployment-token "$SWA_TOKEN"
 
