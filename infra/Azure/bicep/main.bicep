@@ -1,6 +1,6 @@
 // Orchestrates all 3 stages in one deployment: rg-robe-dev / rg-robe-gamma /
 // rg-robe-live, each with its own Key Vault, App Service, Azure OpenAI account
-// (gpt-4.1 deployment), and Application Insights (see modules/stage.bicep).
+// (gpt-5-mini deployment), and Application Insights (see modules/stage.bicep).
 // Subscription-scoped because it creates the resource groups themselves.
 //
 // Deploy:
@@ -15,7 +15,7 @@
 // is emitted as a Bicep output and set by dev-create.sh automatically; populate
 // the others by hand for gamma/live):
 //   az keyvault secret set --vault-name kv-robeai-dev --name AzureOpenAI--Endpoint --value <from output>
-//   az keyvault secret set --vault-name kv-robeai-dev --name AzureOpenAI--DeploymentName --value gpt-4-1
+//   az keyvault secret set --vault-name kv-robeai-dev --name AzureOpenAI--DeploymentName --value gpt-5-mini
 //   (repeat for kv-robeai-gamma / kv-robeai-live)
 // No API key is needed — the App Service managed identity authenticates to Azure
 // OpenAI via the "Cognitive Services OpenAI User" RBAC grant in stage.bicep.
@@ -24,7 +24,7 @@ targetScope = 'subscription'
 
 param location string = 'canadacentral'
 
-@description('Region for all Azure OpenAI accounts. Must have gpt-4.1 GlobalStandard quota allocated.')
+@description('Region for all Azure OpenAI accounts. Must have gpt-5-mini GlobalStandard quota allocated.')
 param openAiLocation string = 'canadacentral'
 
 resource rgDev 'Microsoft.Resources/resourceGroups@2024-03-01' = {
