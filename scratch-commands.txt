@@ -42,6 +42,14 @@ cd infra/Azure/bicep
 # ./dev-create.sh --yes --subscription=<id>   pick a specific subscription
 
 ###############################################################################
+# GITHUB CLI — install and authenticate (one-time, required for gh workflow run)
+###############################################################################
+winget install --id GitHub.cli
+# Restart terminal, then:
+gh auth login
+# Choose: GitHub.com → HTTPS → Login with a web browser
+
+###############################################################################
 # GITHUB ACTIONS — one-time OIDC setup (already done — recorded for reference)
 # SP: sp-robe-github-deploy  |  App ID: 635defe9-b887-4fd9-abed-febf95746c2e
 # Subscription: c3b2ab0c-a402-4b3a-aed1-c62aca631c9e
