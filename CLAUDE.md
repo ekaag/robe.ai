@@ -536,6 +536,12 @@ Look for versions without a `replacementConfig` / `autoUpgradeStartDate` already
 - `gpt-4o/2024-11-20`, `gpt-4o/2024-08-06`, `gpt-4o/2024-05-13` — all `ServiceModelDeprecating`
 - `gpt-4.1/2025-04-14` — entered deprecating state July 2026
 
+**Azure AI Foundry (`kind: 'AIServices'`) vs classic Azure OpenAI (`kind: 'OpenAI'`):** we
+deliberately kept `kind: 'OpenAI'` in `stage.bicep`. Switching to `kind: 'AIServices'`
+(a Foundry resource) does **not** bypass model deprecation — deprecation is enforced at
+the model+version level regardless of resource kind. There is no other compelling reason
+to switch right now; `kind: 'OpenAI'` is simpler and sufficient.
+
 ---
 
 ## Infra setup: CI pipeline for dev stage  ⬜ TODO (planned, not yet built)
@@ -620,17 +626,19 @@ Request (multipart/form-data **or** JSON with base64):
 
 Response `200`:
 ```jsonc
-{ "traits": { /* GarmentTraits object */ }, "modelVersion": "azure-openai-gpt-4.1" }
+{ "traits": { /* GarmentTraits object */ }, "modelVersion": "azure-openai-gpt-5-mini" }
 ```
 
 Errors: `400` (bad/missing image), `422` (no garment detected), `502` (model
 call failed).
 
-Implementation notes: send the image to the Azure OpenAI vision model (gpt-4.1)
-via the Chat Completions API, using **JSON mode / structured outputs** with a
-prompt that demands JSON matching the GarmentTraits schema and nothing else;
+Implementation notes: send the image to the Azure OpenAI vision model (gpt-5-mini)
+via the Chat Completions API, using **JSON mode** (`ChatResponseFormat.CreateJsonObjectFormat()`)
+with a prompt that demands JSON matching the GarmentTraits schema and nothing else;
 still parse defensively (strip any code fences, validate against the schema,
-reject/repair on parse failure).
+reject/repair on parse failure). JSON Object mode is model-agnostic and works
+with gpt-5-mini; upgrading to schema-constrained Structured Outputs
+(`CreateJsonSchemaFormat`) would give stronger guarantees but is not required.
 
 Tests to show passing:
 - valid image → well-formed `GarmentTraits` with required fields populated
