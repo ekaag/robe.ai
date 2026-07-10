@@ -18,51 +18,55 @@ cd vestra && pnpm dev
 pnpm --filter @vestra/web run dev
 
 ###############################################################################
-# DEV STAGE — full end-to-end deploy (infra + backend + frontend)
+# DEV STAGE — full environment deploy (infra + backend + frontend)
 ###############################################################################
 
+# Step 1: Deploy infra + backend (Git Bash, from repo root)
 cd infra/Azure/bicep
+./dev-create.sh --yes --skip-frontend
+# Creates: rg-robe-dev, Key Vault, App Service, Azure OpenAI, App Insights, SWA
+# Populates: Key Vault secrets, deploys robe.api, runs smoke test
+# --skip-frontend avoids the Windows EPERM symlink error in standalone Next.js build
 
-# Deploy everything: resource group, Key Vault, App Service, Azure OpenAI,
-# Application Insights, Static Web App, RBAC grants, secrets, robe.api zip
-# deploy, smoke test, Next.js build, SWA deploy.
-./dev-create.sh
+# Step 2: Deploy frontend (GitHub Actions — runs on Linux, no EPERM)
+gh workflow run deploy-frontend.yml --field stage=dev
+gh run watch
 
-# With flags:
-./dev-create.sh --yes                          # skip all confirmation prompts
-./dev-create.sh --yes --subscription=<id>      # pick a specific subscription
-./dev-create.sh --yes --skip-frontend          # deploy infra+backend only, no frontend build
-
-# Teardown dev (stops cost accrual). Always use --purge-vault --purge-openai
-# so the soft-deleted names (kv-robeai-dev, aoai-robe-dev) are freed immediately
-# and dev-create.sh can redeploy without a name conflict.
+# Teardown dev when done (stops cost accrual):
+cd infra/Azure/bicep
 ./dev-teardown.sh --yes --wait --purge-vault --purge-openai
 
+# Re-deploy dev after teardown: repeat Step 1 + Step 2 above.
+
+# Other flags:
+# ./dev-create.sh --yes --subscription=<id>   pick a specific subscription
+
 ###############################################################################
-# GITHUB ACTIONS — one-time OIDC setup (run once per subscription, no resource
-# groups need to exist yet — subscription scope handles ephemeral rg-robe-*)
+# GITHUB ACTIONS — one-time OIDC setup (already done — recorded for reference)
+# SP: sp-robe-github-deploy  |  App ID: 635defe9-b887-4fd9-abed-febf95746c2e
+# Subscription: c3b2ab0c-a402-4b3a-aed1-c62aca631c9e
 ###############################################################################
 
-# 1. Create the service principal scoped to the subscription
+# 1. Create the service principal scoped to the subscription (run in PowerShell
+#    or prefix with MSYS_NO_PATHCONV=1 in Git Bash to avoid path mangling)
 az ad sp create-for-rbac --name "sp-robe-github-deploy" \
   --role Contributor \
-  --scopes /subscriptions/<SUB_ID>
-# Output includes clientId, tenantId, subscriptionId — save for step 3.
+  --scopes /subscriptions/c3b2ab0c-a402-4b3a-aed1-c62aca631c9e
 
-# 2. Add federated credential so GitHub Actions can mint OIDC tokens for it
-az ad app federated-credential create --id <CLIENT_ID> --parameters '{
+# 2. Add federated credential (GitHub Actions on main branch can mint OIDC tokens)
+az ad app federated-credential create --id 635defe9-b887-4fd9-abed-febf95746c2e --parameters '{
   "name": "robe-github-main",
   "issuer": "https://token.actions.githubusercontent.com",
   "subject": "repo:ekaag/robe.ai:ref:refs/heads/main",
   "audiences": ["api://AzureADTokenExchange"]
 }'
 
-# 3. In GitHub → Settings → Environments, create environments: dev, gamma, live
-#    Add these secrets to each (values from step 1 output):
-#      AZURE_CLIENT_ID       → clientId
-#      AZURE_TENANT_ID       → tenantId
-#      AZURE_SUBSCRIPTION_ID → subscriptionId
-#    Add these variables to gamma/live (leave empty on dev → uses FakeAuthProvider):
+# 3. GitHub → Settings → Environments → create: dev, gamma, live
+#    Add secrets to each environment:
+#      AZURE_CLIENT_ID       → 635defe9-b887-4fd9-abed-febf95746c2e
+#      AZURE_TENANT_ID       → (from: az account show --query tenantId -o tsv)
+#      AZURE_SUBSCRIPTION_ID → c3b2ab0c-a402-4b3a-aed1-c62aca631c9e
+#    Add variables to gamma/live only (leave empty on dev → uses FakeAuthProvider):
 #      FRONTEND_ENTRA_AUTHORITY
 #      FRONTEND_ENTRA_CLIENT_ID
 #      FRONTEND_ENTRA_API_SCOPE
@@ -115,44 +119,76 @@ export FRONTEND_ENTRA_API_SCOPE="api://d4cd6bf9-9a9e-44e6-b7e5-12660e5e32d9/acce
 #   live  → https://swa-robe-live.<random>.azurestaticapps.net
 
 ###############################################################################
-# GAMMA + LIVE — infra deploy (Bicep only, no frontend content)
+# GAMMA STAGE — full environment deploy (infra + backend + frontend)
 ###############################################################################
-# main.bicep creates all 3 resource groups + all 3 stages at once.
-# After deploy, populate secrets manually for gamma/live (dev-create.sh does
-# this automatically for dev only).
 
+# Step 1: Deploy infra (Bicep — creates rg-robe-gamma and all its resources)
 az login
-az account set --subscription <subscription-id>
-
-# Deploy all 3 stages (creates rg-robe-dev, rg-robe-gamma, rg-robe-live):
-az deployment sub create \
-  --location canadacentral \
-  --template-file infra/Azure/bicep/main.bicep
-
-# Deploy a single stage (e.g. gamma) into its existing resource group:
+az account set --subscription c3b2ab0c-a402-4b3a-aed1-c62aca631c9e
+# Deploy gamma only:
 az deployment group create \
   --resource-group rg-robe-gamma \
   --template-file infra/Azure/bicep/modules/stage.bicep \
   --parameters infra/Azure/bicep/parameters/gamma.bicepparam
+# (Or deploy all 3 stages at once via main.bicep — see bottom of file)
 
-# Populate secrets after Bicep deploy (gamma example — repeat for live):
+# Step 2: Populate Key Vault secrets (gamma)
 AOAI_ENDPOINT=$(az deployment group show \
   --resource-group rg-robe-gamma \
   --name deploy-stage-gamma \
   --query "properties.outputs.openAiEndpoint.value" -o tsv)
-
-az keyvault secret set --vault-name kv-robeai-gamma --name AzureOpenAI--Endpoint      --value "$AOAI_ENDPOINT"
+az keyvault secret set --vault-name kv-robeai-gamma --name AzureOpenAI--Endpoint       --value "$AOAI_ENDPOINT"
 az keyvault secret set --vault-name kv-robeai-gamma --name AzureOpenAI--DeploymentName --value "gpt-5-mini"
-# No API key needed — App Service managed identity uses Cognitive Services OpenAI User RBAC.
+# No API key needed — managed identity uses Cognitive Services OpenAI User RBAC.
 
-# Deploy robe.api to gamma App Service:
+# Step 3: Deploy robe.api to gamma App Service
 dotnet publish robe.api -c Release -o /tmp/robe-publish
 cd /tmp/robe-publish && zip -r ../robe.zip . && cd -
 az webapp deploy --resource-group rg-robe-gamma --name app-robe-gamma \
   --src-path /tmp/robe.zip --type zip
 
-# Then deploy frontend:
-./infra/Azure/bicep/deploy-frontend.sh --stage=gamma --yes
+# Step 4: Deploy frontend via GitHub Actions
+# Prereq: set Entra variables in GitHub → Settings → Environments → gamma:
+#   FRONTEND_ENTRA_AUTHORITY, FRONTEND_ENTRA_CLIENT_ID, FRONTEND_ENTRA_API_SCOPE
+gh workflow run deploy-frontend.yml --field stage=gamma
+gh run watch
+
+###############################################################################
+# LIVE STAGE — full environment deploy (infra + backend + frontend)
+###############################################################################
+
+# Step 1: Deploy infra (Bicep — creates rg-robe-live and all its resources)
+az deployment group create \
+  --resource-group rg-robe-live \
+  --template-file infra/Azure/bicep/modules/stage.bicep \
+  --parameters infra/Azure/bicep/parameters/live.bicepparam
+
+# Step 2: Populate Key Vault secrets (live)
+AOAI_ENDPOINT=$(az deployment group show \
+  --resource-group rg-robe-live \
+  --name deploy-stage-live \
+  --query "properties.outputs.openAiEndpoint.value" -o tsv)
+az keyvault secret set --vault-name kv-robeai-live --name AzureOpenAI--Endpoint       --value "$AOAI_ENDPOINT"
+az keyvault secret set --vault-name kv-robeai-live --name AzureOpenAI--DeploymentName --value "gpt-5-mini"
+
+# Step 3: Deploy robe.api to live App Service
+dotnet publish robe.api -c Release -o /tmp/robe-publish
+cd /tmp/robe-publish && zip -r ../robe.zip . && cd -
+az webapp deploy --resource-group rg-robe-live --name app-robe-live \
+  --src-path /tmp/robe.zip --type zip
+
+# Step 4: Deploy frontend via GitHub Actions
+# Prereq: set Entra variables in GitHub → Settings → Environments → live:
+#   FRONTEND_ENTRA_AUTHORITY, FRONTEND_ENTRA_CLIENT_ID, FRONTEND_ENTRA_API_SCOPE
+gh workflow run deploy-frontend.yml --field stage=live
+gh run watch
+
+###############################################################################
+# ALL 3 STAGES — deploy infra at once (Bicep only, then populate secrets above)
+###############################################################################
+az deployment sub create \
+  --location canadacentral \
+  --template-file infra/Azure/bicep/main.bicep
 
 ###############################################################################
 # USEFUL DIAGNOSTICS
@@ -196,48 +232,3 @@ az cognitiveservices account deployment show --name rdev-foundry-resource --reso
 
 az group delete --name my-foundry-rg --yes --no-wait
 
-###############################################################################
-# GITHUB ACTIONS ONE TIME ACTION
-###############################################################################
-
-######################### One time setup for github actions - step 1 ######################### 
-
-az ad sp create-for-rbac --name "sp-robe-github-deploy" \
-  --role Contributor \
-  --scope /subscriptions/c3b2ab0c-a402-4b3a-aed1-c62aca631c9e
-
-######################### One time setup for github actions - step 1 ends ######################### 
-
-######################### One time setup for github actions - step 2 ######################### 
-az ad app federated-credential create --id 635defe9-b887-4fd9-abed-febf95746c2e --parameters '{
-  "name": "robe-github-main",
-  "issuer": "https://token.actions.githubusercontent.com",
-  "subject": "repo:ekaag/robe.ai:ref:refs/heads/main",
-  "audiences": ["api://AzureADTokenExchange"]
-}'
-
-{
-  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#applications('dae1ab41-94c8-4e70-a99f-6099668b8a6e')/federatedIdentityCredentials/$entity",
-  "audiences": [
-    "api://AzureADTokenExchange"
-  ],
-  "description": null,
-  "id": "871678e0-11a8-4e1a-9795-4720d2c4b7aa",
-  "issuer": "https://token.actions.githubusercontent.com",
-  "name": "robe-github-main",
-  "subject": "repo:ekaag/robe.ai:ref:refs/heads/main"
-}
-
-######################### One time setup for github actions - step 2 ends ######################### 
-
-######################### One time setup for github actions - step 3 ######################### 
-In your GitHub repo (github.com/ekaag/robe.ai):
-
-Settings → Environments (left sidebar) → New environment
-Create three environments, one at a time: dev, gamma, live
-For each environment, click into it → Add secret → add these three:
-AZURE_CLIENT_ID — the appId from the SP creation output
-AZURE_TENANT_ID — run az account show --query tenantId -o tsv to get it
-AZURE_SUBSCRIPTION_ID — c3b2ab0c-a402-4b3a-aed1-c62aca631c9e
-
-######################### One time setup for github actions - step 3 ends #########################
