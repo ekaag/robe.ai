@@ -14,11 +14,14 @@ import type {
   Season,
   MeUser,
   GarmentCategory,
+  BatchImageInput,
+  BatchAnalyzeResult,
 } from "@vestra/types";
 
 export interface IApiClient {
   getMe(): Promise<MeUser>;
   analyzeGarment(image: ImageInput): Promise<GarmentTraits>;
+  analyzeBatch(images: BatchImageInput[]): Promise<BatchAnalyzeResult>;
   addGarment(input: AddGarmentInput): Promise<Garment>;
   listGarments(q?: GarmentQuery): Promise<Garment[]>;
   getGarment(id: string): Promise<Garment>;
@@ -82,6 +85,10 @@ export class HttpApiClient implements IApiClient {
       "POST", "/api/garments/analyze", image
     );
     return res.traits;
+  }
+
+  analyzeBatch(images: BatchImageInput[]): Promise<BatchAnalyzeResult> {
+    return this.request("POST", "/api/garments/analyze-batch", { images });
   }
 
   addGarment(input: AddGarmentInput): Promise<Garment> {
@@ -296,6 +303,51 @@ export class FakeApiClient implements IApiClient {
   async analyzeGarment(_image: ImageInput): Promise<GarmentTraits> {
     return fakeTraits;
   }
+
+  async analyzeBatch(images: BatchImageInput[]): Promise<BatchAnalyzeResult> {
+    return {
+      images: images.map((img, i) => ({
+        imageId: img.imageId ?? `img-${i + 1}`,
+        people: [
+          {
+            personId: "person-1",
+            position: "center",
+            overallStyle: ["minimalist"],
+            styleTags: ["casual"],
+            clothingItems: [
+              {
+                category: "top",
+                type: "t-shirt",
+                subtype: null,
+                primaryColor: { normalized: "navy", shade: "dark" },
+                secondaryColors: [],
+                pattern: "solid",
+                material: "cotton",
+                fit: "regular",
+                length: null,
+                sleeveLength: "short",
+                neckline: "crew",
+                collarType: null,
+                waistRise: null,
+                closureType: null,
+                details: [],
+                visibleText: null,
+                brand: null,
+                logo: null,
+                condition: "good",
+                styleTags: ["minimalist", "casual"],
+                confidence: 0.9,
+              },
+            ],
+            overallConfidence: 0.9,
+          },
+        ],
+        warnings: [],
+      })),
+      modelVersion: "fake-model",
+    };
+  }
+
   async addGarment(input: AddGarmentInput): Promise<Garment> {
     const now = new Date().toISOString();
     return { ...fakeGarment, traits: input.traits, id: `grm_${Date.now()}`, createdAt: now, modifiedAt: now };

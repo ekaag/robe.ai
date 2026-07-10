@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import type { AddGarmentInput, GarmentQuery, RecommendationContext, ImageInput } from "@vestra/types";
+import type { AddGarmentInput, GarmentQuery, RecommendationContext, ImageInput, BatchImageInput } from "@vestra/types";
 import type { IApiClient } from "./client";
 import { useApiClient } from "./context";
 
@@ -103,6 +103,11 @@ export function useDeleteGarment() {
 export function useAnalyzeGarment() {
   const api = useApiClient();
   return useMutation({ mutationFn: (image: ImageInput) => api.analyzeGarment(image) });
+}
+
+export function useAnalyzeBatch() {
+  const api = useApiClient();
+  return useMutation({ mutationFn: (images: BatchImageInput[]) => api.analyzeBatch(images) });
 }
 
 export function useStyleProfile() {

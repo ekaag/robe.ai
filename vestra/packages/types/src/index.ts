@@ -132,3 +132,60 @@ export interface MeUser {
   name?: string;
   provider: string;
 }
+
+// ---- API #1 Batch: analyze multiple images ----
+
+export interface BatchImageInput {
+  imageId?: string;
+  imageBase64: string;
+  mimeType: string;
+}
+
+export interface ColorTraitResult {
+  normalized: string;
+  shade?: string | null;
+}
+
+export interface ClothingItemTraitsResult {
+  category: string;
+  type: string;
+  subtype?: string | null;
+  primaryColor?: ColorTraitResult | null;
+  secondaryColors: ColorTraitResult[];
+  pattern?: string | null;
+  material?: string | null;
+  fit?: string | null;
+  length?: string | null;
+  sleeveLength?: string | null;
+  neckline?: string | null;
+  collarType?: string | null;
+  waistRise?: string | null;
+  closureType?: string | null;
+  details: string[];
+  visibleText?: string | null;
+  brand?: string | null;
+  logo?: string | null;
+  condition?: string | null;
+  styleTags: string[];
+  confidence: number;
+}
+
+export interface PersonTraitsResult {
+  personId: string;
+  position?: string | null;
+  overallStyle: string[];
+  styleTags: string[];
+  clothingItems: ClothingItemTraitsResult[];
+  overallConfidence: number;
+}
+
+export interface ImageTraitsResult {
+  imageId: string;
+  people: PersonTraitsResult[];
+  warnings: string[];
+}
+
+export interface BatchAnalyzeResult {
+  images: ImageTraitsResult[];
+  modelVersion: string;
+}

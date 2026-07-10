@@ -41,14 +41,18 @@ LOCATION="canadacentral"
 KEY_VAULT="kv-robeai-dev"
 APP_SERVICE="app-robe-dev"
 APP_URL="https://${APP_SERVICE}.azurewebsites.net"
+SWA_NAME="swa-robe-dev"
 DEPLOY_NAME="robe-dev-infra"
+FRONTEND_DIR="$REPO_ROOT/vestra/apps/web"
 
 ASSUME_YES=false
 SUBSCRIPTION=""
+SKIP_FRONTEND=false
 for arg in "$@"; do
   case "$arg" in
     --yes|-y) ASSUME_YES=true ;;
     --subscription=*) SUBSCRIPTION="${arg#*=}" ;;
+    --skip-frontend) SKIP_FRONTEND=true ;;
     *) echo "Unknown argument: $arg" >&2; exit 1 ;;
   esac
 done
@@ -171,6 +175,10 @@ echo "==> Checking prerequisites..."
 ensure_az_cli
 command -v dotnet >/dev/null 2>&1 || fail "dotnet SDK not found."
 command -v curl >/dev/null 2>&1 || fail "curl not found."
+if [ "$SKIP_FRONTEND" != true ]; then
+  command -v node >/dev/null 2>&1 || fail "Node.js not found. Install it to build the frontend, or pass --skip-frontend."
+  command -v pnpm >/dev/null 2>&1 || { echo "pnpm not found — installing globally via npm..."; npm install -g pnpm; }
+fi
 az account show >/dev/null 2>&1 || fail "Not logged in to Azure. Run: az login"
 
 select_subscription
@@ -294,6 +302,66 @@ for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
   fi
 done
 
+if [ "$SKIP_FRONTEND" = true ]; then
+  echo "==> Skipping frontend build/deploy (--skip-frontend)."
+else
+  echo "==> [8/9] Building frontend (Next.js standalone)..."
+  # Read the SWA hostname from deployment outputs so NEXT_PUBLIC_ENTRA_REDIRECT_URI is correct.
+  SWA_HOSTNAME="$(az deployment group show \
+    --resource-group "$RESOURCE_GROUP" \
+    --name "$DEPLOY_NAME" \
+    --query "properties.outputs.staticWebAppHostName.value" \
+    -o tsv)"
+  [ -n "$SWA_HOSTNAME" ] || fail "staticWebAppHostName not found in deployment outputs."
+  echo "    SWA hostname: $SWA_HOSTNAME"
+
+  # NEXT_PUBLIC_* vars are baked in at build time by the Next.js compiler.
+  # Entra vars are optional for the dev stage (the backend falls back to LocalAuthHandler
+  # when Entra:Authority is not configured). Export them from your shell env before running
+  # this script if you need real sign-in:
+  #   export FRONTEND_ENTRA_AUTHORITY="https://vestraoauth.ciamlogin.com/..."
+  #   export FRONTEND_ENTRA_CLIENT_ID="d4cd6bf9-..."
+  #   export FRONTEND_ENTRA_API_SCOPE="api://d4cd6bf9-.../access_as_user"
+  cd "$REPO_ROOT/vestra"
+  pnpm install --frozen-lockfile
+
+  NEXT_PUBLIC_API_BASE_URL="$APP_URL" \
+  NEXT_PUBLIC_ENTRA_REDIRECT_URI="https://${SWA_HOSTNAME}/auth/blank" \
+  NEXT_PUBLIC_ENTRA_AUTHORITY="${FRONTEND_ENTRA_AUTHORITY:-}" \
+  NEXT_PUBLIC_ENTRA_CLIENT_ID="${FRONTEND_ENTRA_CLIENT_ID:-}" \
+  NEXT_PUBLIC_ENTRA_API_SCOPE="${FRONTEND_ENTRA_API_SCOPE:-}" \
+    pnpm --filter @vestra/web run build
+
+  # Bundle static assets into the standalone output so the Node.js server can serve them.
+  cp -r "$FRONTEND_DIR/.next/static" "$FRONTEND_DIR/.next/standalone/.next/static"
+  if [ -d "$FRONTEND_DIR/public" ]; then
+    cp -r "$FRONTEND_DIR/public" "$FRONTEND_DIR/.next/standalone/public"
+  fi
+  # SWA CLI picks up staticwebapp.config.json from the deployment root.
+  cp "$FRONTEND_DIR/staticwebapp.config.json" "$FRONTEND_DIR/.next/standalone/staticwebapp.config.json"
+
+  echo "==> [9/9] Deploying frontend to Azure Static Web Apps ($SWA_NAME)..."
+  SWA_TOKEN="$(az staticwebapp secrets list \
+    --name "$SWA_NAME" \
+    --resource-group "$RESOURCE_GROUP" \
+    --query "properties.apiKey" \
+    -o tsv)"
+  [ -n "$SWA_TOKEN" ] || fail "Could not retrieve SWA deployment token for $SWA_NAME."
+
+  # Deploy the pre-built standalone output. --skip-app-build skips rebuilding inside
+  # the SWA CLI since we already built above with our custom env vars and pnpm workspace.
+  npx --yes @azure/static-web-apps-cli@latest deploy \
+    --app-location "$FRONTEND_DIR/.next/standalone" \
+    --skip-app-build \
+    --deployment-token "$SWA_TOKEN"
+
+  echo ""
+  echo "    Frontend deployed to: https://$SWA_HOSTNAME"
+fi
+
 echo ""
 echo "==> dev stage is up at $APP_URL"
+if [ "$SKIP_FRONTEND" != true ]; then
+  echo "    Frontend: https://$SWA_HOSTNAME"
+fi
 echo "    Run ./dev-teardown.sh when you're done to stop accruing cost."

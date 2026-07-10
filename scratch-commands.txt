@@ -1,4 +1,138 @@
+###############################################################################
+# LOCAL DEV
+###############################################################################
+
+# Backend — local fakes mode (UseLocalFakes: true in appsettings.Local.json,
+# no Azure services, FakeTraitsExtractor / InMemoryGarmentRepository / etc.)
+ASPNETCORE_ENVIRONMENT=Local dotnet run --project robe.api
+
+# Backend — dev Azure stage config (real Key Vault / OpenAI / Blob, requires
+# the dev stage to be deployed and az login with the right subscription)
 ASPNETCORE_ENVIRONMENT=Dev dotnet run --project robe.api
+
+# Frontend — local dev server (reads vestra/apps/web/.env.local)
+# Copy .env.local.example to .env.local first (leave NEXT_PUBLIC_ENTRA_CLIENT_ID
+# commented out to use FakeAuthProvider + local API, no Entra tenant needed)
+cd vestra && pnpm dev
+# or from repo root:
+pnpm --filter @vestra/web run dev
+
+###############################################################################
+# DEV STAGE — full end-to-end deploy (infra + backend + frontend)
+###############################################################################
+
+cd infra/Azure/bicep
+
+# Deploy everything: resource group, Key Vault, App Service, Azure OpenAI,
+# Application Insights, Static Web App, RBAC grants, secrets, robe.api zip
+# deploy, smoke test, Next.js build, SWA deploy.
+./dev-create.sh
+
+# With flags:
+./dev-create.sh --yes                          # skip all confirmation prompts
+./dev-create.sh --yes --subscription=<id>      # pick a specific subscription
+./dev-create.sh --yes --skip-frontend          # deploy infra+backend only, no frontend build
+
+# Teardown dev (stops cost accrual). Always use --purge-vault --purge-openai
+# so the soft-deleted names (kv-robeai-dev, aoai-robe-dev) are freed immediately
+# and dev-create.sh can redeploy without a name conflict.
+./dev-teardown.sh --yes --wait --purge-vault --purge-openai
+
+###############################################################################
+# FRONTEND DEPLOY — any stage (build Next.js → push to Azure SWA)
+###############################################################################
+# Prereq: Bicep infra for that stage must already exist (SWA resource created).
+# For dev: dev-create.sh already does this. Use deploy-frontend.sh to redeploy
+# just the frontend, or to deploy gamma/live after main.bicep has run.
+
+cd infra/Azure/bicep
+
+# Redeploy dev frontend only (e.g. after a UI change):
+./deploy-frontend.sh --stage=dev
+
+# Deploy gamma frontend (Bicep infra must exist in rg-robe-gamma):
+./deploy-frontend.sh --stage=gamma
+
+# Deploy live frontend (Bicep infra must exist in rg-robe-live):
+./deploy-frontend.sh --stage=live --yes
+
+# With real Entra sign-in (needed for gamma/live — set env vars before running):
+export FRONTEND_ENTRA_AUTHORITY="https://vestraoauth.ciamlogin.com/vestraoauth.onmicrosoft.com"
+export FRONTEND_ENTRA_CLIENT_ID="d4cd6bf9-9a9e-44e6-b7e5-12660e5e32d9"
+export FRONTEND_ENTRA_API_SCOPE="api://d4cd6bf9-9a9e-44e6-b7e5-12660e5e32d9/access_as_user"
+./deploy-frontend.sh --stage=gamma --yes
+
+# API endpoints by stage (frontend baked-in at build time):
+#   dev   → https://app-robe-dev.azurewebsites.net
+#   gamma → https://app-robe-gamma.azurewebsites.net
+#   live  → https://app-robe-live.azurewebsites.net
+
+# Frontend URLs (after deploy):
+#   dev   → https://swa-robe-dev.<random>.azurestaticapps.net  (shown at end of script)
+#   gamma → https://swa-robe-gamma.<random>.azurestaticapps.net
+#   live  → https://swa-robe-live.<random>.azurestaticapps.net
+
+###############################################################################
+# GAMMA + LIVE — infra deploy (Bicep only, no frontend content)
+###############################################################################
+# main.bicep creates all 3 resource groups + all 3 stages at once.
+# After deploy, populate secrets manually for gamma/live (dev-create.sh does
+# this automatically for dev only).
+
+az login
+az account set --subscription <subscription-id>
+
+# Deploy all 3 stages (creates rg-robe-dev, rg-robe-gamma, rg-robe-live):
+az deployment sub create \
+  --location canadacentral \
+  --template-file infra/Azure/bicep/main.bicep
+
+# Deploy a single stage (e.g. gamma) into its existing resource group:
+az deployment group create \
+  --resource-group rg-robe-gamma \
+  --template-file infra/Azure/bicep/modules/stage.bicep \
+  --parameters infra/Azure/bicep/parameters/gamma.bicepparam
+
+# Populate secrets after Bicep deploy (gamma example — repeat for live):
+AOAI_ENDPOINT=$(az deployment group show \
+  --resource-group rg-robe-gamma \
+  --name deploy-stage-gamma \
+  --query "properties.outputs.openAiEndpoint.value" -o tsv)
+
+az keyvault secret set --vault-name kv-robeai-gamma --name AzureOpenAI--Endpoint      --value "$AOAI_ENDPOINT"
+az keyvault secret set --vault-name kv-robeai-gamma --name AzureOpenAI--DeploymentName --value "gpt-5-mini"
+# No API key needed — App Service managed identity uses Cognitive Services OpenAI User RBAC.
+
+# Deploy robe.api to gamma App Service:
+dotnet publish robe.api -c Release -o /tmp/robe-publish
+cd /tmp/robe-publish && zip -r ../robe.zip . && cd -
+az webapp deploy --resource-group rg-robe-gamma --name app-robe-gamma \
+  --src-path /tmp/robe.zip --type zip
+
+# Then deploy frontend:
+./infra/Azure/bicep/deploy-frontend.sh --stage=gamma --yes
+
+###############################################################################
+# USEFUL DIAGNOSTICS
+###############################################################################
+
+# Tail live App Service logs (any stage):
+az webapp log tail --resource-group rg-robe-dev   --name app-robe-dev
+az webapp log tail --resource-group rg-robe-gamma --name app-robe-gamma
+az webapp log tail --resource-group rg-robe-live  --name app-robe-live
+
+# Check available gpt-5-mini versions in eastus (if deploy fails with ServiceModelDeprecating):
+az cognitiveservices model list --location eastus -o json \
+  | python3 -c "import json,sys; [print(m['model']['name'], m['model']['version']) \
+    for m in json.load(sys.stdin) if 'gpt-5' in m.get('model',{}).get('name','')]" | sort -u
+
+# Swagger UI (local):
+#   http://localhost:5000/swagger
+# Swagger UI (dev):
+#   https://app-robe-dev.azurewebsites.net/swagger
+# Use X-User-Id header in Swagger "Authorize" for local auth bypass.
+
+###############################################################################
 
 ### set up Foundry account and clean it up after model deployment
 

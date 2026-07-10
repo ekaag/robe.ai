@@ -12,6 +12,12 @@ export class FakeAuthProvider implements IAuthProvider {
   }
 
   async getAccessToken(): Promise<string | null> {
-    return this.currentUser ? "fake-access-token" : null;
+    if (!this.currentUser) return null;
+    // Minimal fake JWT (header.payload.sig) so LocalAuthHandler.TryBuildTicketFromJwt
+    // can decode the sub claim without signature validation. A plain string like
+    // "fake-access-token" has no dots and fails the 3-part check, causing a 401.
+    const payload = btoa(JSON.stringify({ sub: this.currentUser.id, name: this.currentUser.name ?? "" }))
+      .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    return `eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.${payload}.fakesig`;
   }
 }

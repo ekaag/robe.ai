@@ -27,6 +27,18 @@ param location string = 'canadacentral'
 @description('Region for all Azure OpenAI accounts. Must have gpt-5-mini GlobalStandard quota allocated.')
 param openAiLocation string = 'canadacentral'
 
+@description('Region for all Azure Static Web Apps. SWA is not available in canadacentral.')
+param staticWebAppLocation string = 'eastus2'
+
+@description('Entra External ID (CIAM) authority URL shared across all stages. Set once the tenant is configured.')
+param entraAuthority string = ''
+
+@description('Entra External ID (CIAM) application (client) ID for the frontend.')
+param entraClientId string = ''
+
+@description('Entra API scope the frontend requests, e.g. api://<client-id>/access_as_user.')
+param entraApiScope string = ''
+
 resource rgDev 'Microsoft.Resources/resourceGroups@2024-03-01' = {
   name: 'rg-robe-dev'
   location: location
@@ -53,6 +65,11 @@ module devStage 'modules/stage.bicep' = {
     enablePurgeProtection: false
     openAiLocation: openAiLocation
     openAiModelCapacityK: 10
+    staticWebAppSkuName: 'Standard'
+    staticWebAppLocation: staticWebAppLocation
+    entraAuthority: entraAuthority
+    entraClientId: entraClientId
+    entraApiScope: entraApiScope
   }
 }
 
@@ -67,6 +84,11 @@ module gammaStage 'modules/stage.bicep' = {
     enablePurgeProtection: true
     openAiLocation: openAiLocation
     openAiModelCapacityK: 30
+    staticWebAppSkuName: 'Standard'
+    staticWebAppLocation: staticWebAppLocation
+    entraAuthority: entraAuthority
+    entraClientId: entraClientId
+    entraApiScope: entraApiScope
   }
 }
 
@@ -81,6 +103,11 @@ module liveStage 'modules/stage.bicep' = {
     enablePurgeProtection: true
     openAiLocation: openAiLocation
     openAiModelCapacityK: 100
+    staticWebAppSkuName: 'Standard'
+    staticWebAppLocation: staticWebAppLocation
+    entraAuthority: entraAuthority
+    entraClientId: entraClientId
+    entraApiScope: entraApiScope
   }
 }
 
@@ -88,13 +115,19 @@ output devKeyVaultUri string = devStage.outputs.keyVaultUri
 output devAppServiceHostName string = devStage.outputs.appServiceDefaultHostName
 output devOpenAiEndpoint string = devStage.outputs.openAiEndpoint
 output devOpenAiDeploymentName string = devStage.outputs.openAiDeploymentName
+output devStaticWebAppName string = devStage.outputs.staticWebAppName
+output devStaticWebAppHostName string = devStage.outputs.staticWebAppHostName
 
 output gammaKeyVaultUri string = gammaStage.outputs.keyVaultUri
 output gammaAppServiceHostName string = gammaStage.outputs.appServiceDefaultHostName
 output gammaOpenAiEndpoint string = gammaStage.outputs.openAiEndpoint
 output gammaOpenAiDeploymentName string = gammaStage.outputs.openAiDeploymentName
+output gammaStaticWebAppName string = gammaStage.outputs.staticWebAppName
+output gammaStaticWebAppHostName string = gammaStage.outputs.staticWebAppHostName
 
 output liveKeyVaultUri string = liveStage.outputs.keyVaultUri
 output liveAppServiceHostName string = liveStage.outputs.appServiceDefaultHostName
 output liveOpenAiEndpoint string = liveStage.outputs.openAiEndpoint
 output liveOpenAiDeploymentName string = liveStage.outputs.openAiDeploymentName
+output liveStaticWebAppName string = liveStage.outputs.staticWebAppName
+output liveStaticWebAppHostName string = liveStage.outputs.staticWebAppHostName
