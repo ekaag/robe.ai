@@ -96,7 +96,6 @@ if [ "$PURGE_OPENAI" = true ]; then
     echo "==> Purging soft-deleted Azure OpenAI account $OPENAI_ACCOUNT (location: $DELETED_LOCATION)..."
     az cognitiveservices account purge \
       --name "$OPENAI_ACCOUNT" \
-      --resource-group "$RESOURCE_GROUP" \
       --location "$DELETED_LOCATION" || \
       echo "    Purge failed — it may already be gone, or still finishing deletion (retry in a minute)."
   else
