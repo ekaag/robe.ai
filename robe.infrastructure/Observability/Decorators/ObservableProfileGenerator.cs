@@ -36,7 +36,7 @@ public class ObservableProfileGenerator : IProfileGenerator
             await _alerts.RaiseAsync(
                 AlertSeverity.Error,
                 "Style profile generation failed",
-                new Dictionary<string, object?> { ["exception"] = ex.GetType().Name },
+                new Dictionary<string, object?> { ["exception"] = ex.GetType().Name, ["exceptionMessage"] = ex.Message },
                 ct);
             throw;
         }

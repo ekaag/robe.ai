@@ -34,7 +34,7 @@ public class ObservableSecretManager : ISecretManager
             await _alerts.RaiseAsync(
                 AlertSeverity.Error,
                 "Secret fetch failed",
-                new Dictionary<string, object?> { ["secretName"] = name, ["exception"] = ex.GetType().Name },
+                new Dictionary<string, object?> { ["secretName"] = name, ["exception"] = ex.GetType().Name, ["exceptionMessage"] = ex.Message },
                 ct);
             throw;
         }

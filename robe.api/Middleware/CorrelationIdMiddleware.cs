@@ -31,6 +31,13 @@ public class CorrelationIdMiddleware
         correlation.CorrelationId = correlationId;
         context.Response.Headers[HeaderName] = correlationId;
 
+        log.Info("HTTP request started", new Dictionary<string, object?>
+        {
+            ["method"] = context.Request.Method,
+            ["path"] = context.Request.Path.ToString(),
+            ["query"] = context.Request.QueryString.ToString()
+        });
+
         var stopwatch = Stopwatch.StartNew();
         try
         {
@@ -50,21 +57,29 @@ public class CorrelationIdMiddleware
                 catch (InvalidOperationException) { /* claims missing despite IsAuthenticated — leave UserId empty */ }
             }
 
+            var statusCode = context.Response.StatusCode;
             var tags = new Dictionary<string, string>
             {
                 ["method"] = context.Request.Method,
-                ["statusCode"] = context.Response.StatusCode.ToString()
+                ["statusCode"] = statusCode.ToString()
             };
             metrics.RecordValue("http.request_duration_ms", stopwatch.Elapsed.TotalMilliseconds, tags);
             metrics.Increment("http.requests", 1, tags);
 
-            log.Info("HTTP request completed", new Dictionary<string, object?>
+            var completionProperties = new Dictionary<string, object?>
             {
                 ["method"] = context.Request.Method,
                 ["path"] = context.Request.Path.ToString(),
-                ["statusCode"] = context.Response.StatusCode,
+                ["statusCode"] = statusCode,
                 ["durationMs"] = stopwatch.Elapsed.TotalMilliseconds
-            });
+            };
+
+            if (statusCode >= 500)
+                log.Error("HTTP request completed with server error", properties: completionProperties);
+            else if (statusCode >= 400)
+                log.Warn("HTTP request completed with client error", completionProperties);
+            else
+                log.Info("HTTP request completed", completionProperties);
         }
     }
 }

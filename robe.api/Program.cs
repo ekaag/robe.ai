@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.IdentityModel.Tokens;
 using Robe.Api.Middleware;
 using Robe.Core.Interfaces;
+using Robe.Core.Observability;
 using Robe.Infrastructure.Auth;
 using Robe.Infrastructure.Observability;
 using Robe.Infrastructure.Observability.Azure;
@@ -223,7 +224,8 @@ if (useLocalFakes)
     builder.Services.AddSingleton<IGarmentRepository>(sp => new ObservableGarmentRepository(
         new InMemoryGarmentRepository(),
         sp.GetRequiredService<ILogService>(),
-        sp.GetRequiredService<IMetricsService>()));
+        sp.GetRequiredService<IMetricsService>(),
+        sp.GetRequiredService<IAlertService>()));
     builder.Services.AddSingleton<IImageStore, InMemoryImageStore>();
     builder.Services.AddScoped<IProfileGenerator>(sp => new ObservableProfileGenerator(
         new FakeProfileGenerator(),
@@ -267,7 +269,8 @@ else
     builder.Services.AddScoped<IGarmentRepository>(sp => new ObservableGarmentRepository(
         new AzureSqlGarmentRepository(),
         sp.GetRequiredService<ILogService>(),
-        sp.GetRequiredService<IMetricsService>()));
+        sp.GetRequiredService<IMetricsService>(),
+        sp.GetRequiredService<IAlertService>()));
     builder.Services.AddScoped<IImageStore, AzureBlobImageStore>();
     builder.Services.AddScoped<IProfileGenerator>(sp => new ObservableProfileGenerator(
         new AzureOpenAIProfileGenerator(),
@@ -309,8 +312,28 @@ app.Use(async (context, next) =>
     try { await next(context); }
     catch (Exception ex)
     {
-        var log = context.RequestServices.GetRequiredService<ILogger<Program>>();
-        log.LogError(ex, "Unhandled exception for {Method} {Path}", context.Request.Method, context.Request.Path);
+        var log = context.RequestServices.GetRequiredService<ILogService>();
+        var alerts = context.RequestServices.GetRequiredService<IAlertService>();
+
+        log.Critical("Unhandled exception", ex, new Dictionary<string, object?>
+        {
+            ["method"] = context.Request.Method,
+            ["path"] = context.Request.Path.ToString(),
+            ["exception"] = ex.GetType().Name,
+            ["exceptionMessage"] = ex.Message
+        });
+
+        await alerts.RaiseAsync(
+            AlertSeverity.Critical,
+            "Unhandled server exception",
+            new Dictionary<string, object?>
+            {
+                ["exception"] = ex.GetType().Name,
+                ["exceptionMessage"] = ex.Message,
+                ["method"] = context.Request.Method,
+                ["path"] = context.Request.Path.ToString()
+            });
+
         if (!context.Response.HasStarted)
         {
             context.Response.StatusCode = StatusCodes.Status500InternalServerError;
@@ -331,6 +354,18 @@ app.UseAuthorization();
 app.UseMiddleware<UserContextMiddleware>();
 
 app.MapControllers();
+
+// Flush buffered Application Insights telemetry before the process exits so
+// in-flight events aren't lost on restarts or slot swaps.
+if (!useLocalFakes)
+{
+    app.Lifetime.ApplicationStopping.Register(() =>
+    {
+        app.Services.GetRequiredService<TelemetryClient>().Flush();
+        Task.Delay(TimeSpan.FromSeconds(3)).Wait();
+    });
+}
+
 app.Run();
 
 public partial class Program { }

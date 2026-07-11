@@ -42,7 +42,7 @@ public class ObservableRecommender : IRecommender
             await _alerts.RaiseAsync(
                 AlertSeverity.Error,
                 "Recommendation ranking failed",
-                new Dictionary<string, object?> { ["exception"] = ex.GetType().Name },
+                new Dictionary<string, object?> { ["exception"] = ex.GetType().Name, ["exceptionMessage"] = ex.Message },
                 ct);
             throw;
         }

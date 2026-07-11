@@ -283,11 +283,15 @@ public class ObservableGarmentRepositoryTests
 {
     private readonly LocalLogService _log = new(NullLogger<LocalLogService>.Instance, new AsyncLocalCorrelationContextAccessor());
     private readonly LocalMetricsService _metrics = new(NullLogger<LocalMetricsService>.Instance, new AsyncLocalCorrelationContextAccessor());
+    private readonly LocalAlertService _alerts = new(NullLogger<LocalAlertService>.Instance, new AsyncLocalCorrelationContextAccessor());
+
+    private ObservableGarmentRepository CreateDecorator(IGarmentRepository? inner = null) =>
+        new(inner ?? new InMemoryGarmentRepository(), _log, _metrics, _alerts);
 
     [Fact]
     public async Task AddAsync_IncrementsStoredCounter()
     {
-        var decorator = new ObservableGarmentRepository(new InMemoryGarmentRepository(), _log, _metrics);
+        var decorator = CreateDecorator();
         var now = DateTimeOffset.UtcNow;
 
         await decorator.AddAsync(new Garment
@@ -307,15 +311,58 @@ public class ObservableGarmentRepositoryTests
     }
 
     [Fact]
+    public async Task AddAsync_OnFailure_LogsErrorAndRaisesAlert_ThenRethrows()
+    {
+        var thrown = new InvalidOperationException("DB connection failed");
+        var decorator = CreateDecorator(new FailingGarmentRepository(thrown));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            decorator.AddAsync(new Garment
+            {
+                Id = "grm_fail", UserId = "user-a", Traits = FakeTraitsExtractor.BuildDefaultTraits(),
+                ImageUrl = "", BlobKey = "", CreatedAt = DateTimeOffset.UtcNow,
+                ModifiedAt = DateTimeOffset.UtcNow, CreatedByUserId = "user-a", ModifiedByUserId = "user-a"
+            }));
+
+        Assert.Contains(_metrics.RecentEntries, m => m.Name == "garments.store_failed");
+        Assert.Contains(_log.RecentEntries, e => e.Severity == LogSeverity.Error && e.Exception == thrown);
+        Assert.Single(_alerts.RecentEntries);
+    }
+
+    [Fact]
     public async Task DeleteAsync_WhenNotFound_DoesNotIncrementCounter()
     {
-        var decorator = new ObservableGarmentRepository(new InMemoryGarmentRepository(), _log, _metrics);
+        var decorator = CreateDecorator();
 
         var deleted = await decorator.DeleteAsync("does-not-exist", "user-a");
 
         Assert.False(deleted);
         Assert.DoesNotContain(_metrics.RecentEntries, m => m.Name == "garments.deleted");
     }
+
+    [Fact]
+    public async Task DeleteAsync_OnFailure_LogsErrorAndRaisesAlert_ThenRethrows()
+    {
+        var thrown = new InvalidOperationException("DB connection failed");
+        var decorator = CreateDecorator(new FailingGarmentRepository(thrown));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            decorator.DeleteAsync("grm_1", "user-a"));
+
+        Assert.Contains(_metrics.RecentEntries, m => m.Name == "garments.delete_failed");
+        Assert.Single(_alerts.RecentEntries);
+    }
+}
+
+// Stub that always throws the provided exception on any call.
+file sealed class FailingGarmentRepository : IGarmentRepository
+{
+    private readonly Exception _ex;
+    public FailingGarmentRepository(Exception ex) => _ex = ex;
+    public Task<Garment> AddAsync(Garment garment, CancellationToken ct = default) => throw _ex;
+    public Task<Garment?> GetByIdAsync(string id, string userId, CancellationToken ct = default) => throw _ex;
+    public Task<IReadOnlyList<Garment>> ListAsync(string userId, GarmentQuery query, CancellationToken ct = default) => throw _ex;
+    public Task<bool> DeleteAsync(string id, string userId, CancellationToken ct = default) => throw _ex;
 }
 
 public class ObservableSecretManagerTests

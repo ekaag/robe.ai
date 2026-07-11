@@ -36,7 +36,7 @@ public class ObservableTraitsExtractor : ITraitsExtractor
             await _alerts.RaiseAsync(
                 AlertSeverity.Error,
                 "Garment trait extraction failed",
-                new Dictionary<string, object?> { ["exception"] = ex.GetType().Name },
+                new Dictionary<string, object?> { ["exception"] = ex.GetType().Name, ["exceptionMessage"] = ex.Message },
                 ct);
             throw;
         }

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Robe.Api.Models;
@@ -22,7 +23,7 @@ public class GarmentsController : ControllerBase
     private static readonly Dictionary<string, string> MimeToExtension = new()
     {
         ["image/jpeg"] = ".jpg",
-        ["image/png"]  = ".png",
+        ["image/png"] = ".png",
         ["image/webp"] = ".webp"
     };
 
@@ -41,11 +42,11 @@ public class GarmentsController : ControllerBase
         IImageStore imageStore,
         ICurrentUser currentUser)
     {
-        _extractor        = extractor;
+        _extractor = extractor;
         _fashionExtractor = fashionExtractor;
-        _repository       = repository;
-        _imageStore       = imageStore;
-        _currentUser      = currentUser;
+        _repository = repository;
+        _imageStore = imageStore;
+        _currentUser = currentUser;
     }
 
     // ── API #1 ──────────────────────────────────────────────────────────────
@@ -119,7 +120,7 @@ public class GarmentsController : ControllerBase
         var inputs = new List<FashionImageInput>();
         for (int i = 0; i < request.Images.Count; i++)
         {
-            var img     = request.Images[i];
+            var img = request.Images[i];
             var imageId = string.IsNullOrWhiteSpace(img.ImageId) ? $"img-{i + 1}" : img.ImageId;
 
             if (string.IsNullOrWhiteSpace(img.ImageBase64))
@@ -185,23 +186,23 @@ public class GarmentsController : ControllerBase
         if (request.MimeType is null || !AllowedMimeTypes.Contains(request.MimeType))
             return BadRequest(new ErrorResponse($"Unsupported mimeType '{request.MimeType}'. Allowed: image/jpeg, image/png, image/webp."));
 
-        var id      = $"grm_{Guid.NewGuid():N}";
-        var ext     = MimeToExtension[request.MimeType];
+        var id = $"grm_{Guid.NewGuid():N}";
+        var ext = MimeToExtension[request.MimeType];
         var blobKey = $"{id}{ext}";
-        var userId  = _currentUser.UserId;
-        var now     = DateTimeOffset.UtcNow;
+        var userId = _currentUser.UserId;
+        var now = DateTimeOffset.UtcNow;
 
         var imageUrl = await _imageStore.SaveAsync(new ImageInput(imageBytes, request.MimeType), blobKey, ct);
 
         var garment = new Garment
         {
-            Id              = id,
-            UserId          = userId,
-            Traits          = request.Traits,
-            ImageUrl        = imageUrl,
-            BlobKey         = blobKey,
-            CreatedAt       = now,
-            ModifiedAt      = now,
+            Id = id,
+            UserId = userId,
+            Traits = request.Traits,
+            ImageUrl = imageUrl,
+            BlobKey = blobKey,
+            CreatedAt = now,
+            ModifiedAt = now,
             CreatedByUserId = userId,
             ModifiedByUserId = userId
         };
@@ -224,7 +225,7 @@ public class GarmentsController : ControllerBase
         CancellationToken ct = default)
     {
         pageSize = Math.Clamp(pageSize, 1, 100);
-        page     = Math.Max(page, 1);
+        page = Math.Max(page, 1);
 
         var query = new GarmentQuery(category, page, pageSize);
         var items = await _repository.ListAsync(_currentUser.UserId, query, ct);
