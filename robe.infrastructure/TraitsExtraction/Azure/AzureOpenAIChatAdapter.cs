@@ -36,8 +36,8 @@ internal sealed class AzureOpenAIChatAdapter : IAzureOpenAIChatAdapter
         try
         {
             if (_client is not null) return _client;
-            var endpoint = await _secrets.GetSecretAsync("AzureOpenAI:Endpoint", ct);
-            var deployment = await _secrets.GetSecretAsync("AzureOpenAI:DeploymentName", ct);
+            var endpoint = (await _secrets.GetSecretAsync("AzureOpenAI:Endpoint", ct)).Trim();
+            var deployment = (await _secrets.GetSecretAsync("AzureOpenAI:DeploymentName", ct)).Trim();
             var azure = new AzureOpenAIClient(new Uri(endpoint), new DefaultAzureCredential());
             _client = azure.GetChatClient(deployment);
             return _client;
@@ -59,10 +59,9 @@ internal sealed class AzureOpenAIChatAdapter : IAzureOpenAIChatAdapter
 
         foreach (var img in request.Images)
         {
-            var dataUrl = $"data:{img.ContentType};base64,{Convert.ToBase64String(img.Content)}";
             userParts.Add(ChatMessageContentPart.CreateTextPart($"[Image: {img.ImageId}]"));
             userParts.Add(ChatMessageContentPart.CreateImagePart(
-                new Uri(dataUrl), ChatImageDetailLevel.High));
+                BinaryData.FromBytes(img.Content), img.ContentType, ChatImageDetailLevel.High));
         }
 
         var messages = new List<ChatMessage>
