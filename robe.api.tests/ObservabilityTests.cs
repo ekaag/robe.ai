@@ -10,6 +10,7 @@ using Robe.Infrastructure.Profile;
 using Robe.Infrastructure.Profile.Azure;
 using Robe.Infrastructure.Recommendations;
 using Robe.Infrastructure.Secrets;
+using Robe.Infrastructure.Storage;
 using Robe.Infrastructure.TraitsExtraction;
 
 namespace Robe.Api.Tests;
@@ -363,6 +364,77 @@ file sealed class FailingGarmentRepository : IGarmentRepository
     public Task<Garment?> GetByIdAsync(string id, string userId, CancellationToken ct = default) => throw _ex;
     public Task<IReadOnlyList<Garment>> ListAsync(string userId, GarmentQuery query, CancellationToken ct = default) => throw _ex;
     public Task<bool> DeleteAsync(string id, string userId, CancellationToken ct = default) => throw _ex;
+}
+
+public class ObservableImageStoreTests
+{
+    private readonly LocalLogService _log = new(NullLogger<LocalLogService>.Instance, new AsyncLocalCorrelationContextAccessor());
+    private readonly LocalMetricsService _metrics = new(NullLogger<LocalMetricsService>.Instance, new AsyncLocalCorrelationContextAccessor());
+    private readonly LocalAlertService _alerts = new(NullLogger<LocalAlertService>.Instance, new AsyncLocalCorrelationContextAccessor());
+
+    private static readonly ImageInput Image = new(new byte[16], "image/jpeg");
+
+    private ObservableImageStore CreateDecorator(IImageStore? inner = null) =>
+        new(inner ?? new InMemoryImageStore(), _log, _metrics, _alerts);
+
+    [Fact]
+    public async Task SaveAsync_OnSuccess_IncrementsStoredCounterAndReturnsUrl()
+    {
+        var decorator = CreateDecorator();
+
+        var url = await decorator.SaveAsync(Image, "grm_1.jpg");
+
+        Assert.False(string.IsNullOrEmpty(url));
+        Assert.Contains(_metrics.RecentEntries, m => m.Name == "images.stored");
+        Assert.Empty(_alerts.RecentEntries);
+    }
+
+    [Fact]
+    public async Task SaveAsync_OnFailure_IncrementsFailureCounterLogsErrorAndRaisesAlert_ThenRethrows()
+    {
+        var thrown = new InvalidOperationException("Blob upload failed");
+        var decorator = CreateDecorator(new FailingImageStore(thrown));
+
+        var actual = await Assert.ThrowsAsync<InvalidOperationException>(() => decorator.SaveAsync(Image, "grm_1.jpg"));
+
+        Assert.Same(thrown, actual);
+        Assert.Contains(_metrics.RecentEntries, m => m.Name == "images.store_failed");
+        Assert.Contains(_log.RecentEntries, e => e.Severity == LogSeverity.Error && e.Exception == thrown);
+        Assert.Single(_alerts.RecentEntries);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_OnSuccess_IncrementsDeletedCounter()
+    {
+        var decorator = CreateDecorator();
+
+        await decorator.DeleteAsync("grm_1.jpg");
+
+        Assert.Contains(_metrics.RecentEntries, m => m.Name == "images.deleted");
+        Assert.Empty(_alerts.RecentEntries);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_OnFailure_IncrementsFailureCounterLogsErrorAndRaisesAlert_ThenRethrows()
+    {
+        var thrown = new InvalidOperationException("Blob delete failed");
+        var decorator = CreateDecorator(new FailingImageStore(thrown));
+
+        var actual = await Assert.ThrowsAsync<InvalidOperationException>(() => decorator.DeleteAsync("grm_1.jpg"));
+
+        Assert.Same(thrown, actual);
+        Assert.Contains(_metrics.RecentEntries, m => m.Name == "images.delete_failed");
+        Assert.Single(_alerts.RecentEntries);
+    }
+}
+
+// Stub that always throws the provided exception on any call.
+file sealed class FailingImageStore : IImageStore
+{
+    private readonly Exception _ex;
+    public FailingImageStore(Exception ex) => _ex = ex;
+    public Task<string> SaveAsync(ImageInput image, string key, CancellationToken ct = default) => throw _ex;
+    public Task DeleteAsync(string key, CancellationToken ct = default) => throw _ex;
 }
 
 public class ObservableSecretManagerTests

@@ -54,8 +54,22 @@ param entraClientId string = ''
 @description('Entra API scope the frontend requests, e.g. api://<client-id>/access_as_user. Leave empty to skip setting in SWA appsettings.')
 param entraApiScope string = ''
 
+@description('Storage account redundancy SKU for garment image blobs. LRS for dev, ZRS for gamma, GRS for live.')
+param storageSkuName string = 'Standard_LRS'
+
 var keyVaultSecretsUserRoleId = '4633458b-17de-408a-b874-0445c86b69e6'
 var cognitiveServicesOpenAiUserRoleId = '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd'
+var cosmosBuiltInDataContributorRoleId = '00000000-0000-0000-0000-000000000002'
+var storageBlobDataContributorRoleId = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
+
+// Cosmos DB — API #2 garment storage (IGarmentRepository).
+var cosmosDatabaseName = 'robeai'
+var cosmosGarmentContainerName = 'garments'
+
+// Storage account names must be globally unique, lowercase alphanumeric only,
+// 3-24 chars — uniqueString() suffix avoids collisions across subscriptions.
+var storageAccountName = toLower('strobeai${stageName}${take(uniqueString(resourceGroup().id), 6)}')
+var garmentImagesContainerName = 'garment-images'
 
 // ASPNETCORE_ENVIRONMENT value the app expects, matching appsettings.Dev.json /
 // appsettings.Gamma.json / appsettings.Live.json in robe.api.
@@ -192,6 +206,117 @@ resource openAiUserAssignment 'Microsoft.Authorization/roleAssignments@2022-04-0
   }
 }
 
+// Cosmos DB (SQL API) — backs IGarmentRepository (API #2). Serverless capacity mode
+// in every stage: pay-per-request, no minimum cost, fits this app's current scale.
+// Partition key /userId matches every repository query (GetByIdAsync/ListAsync/DeleteAsync
+// all scope by userId), so single-partition point reads/queries cover the hot path.
+resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' = {
+  name: 'cosmos-robe-${stageName}'
+  location: location
+  kind: 'GlobalDocumentDB'
+  properties: {
+    databaseAccountOfferType: 'Standard'
+    locations: [
+      {
+        locationName: location
+        failoverPriority: 0
+      }
+    ]
+    capabilities: [
+      {
+        name: 'EnableServerless'
+      }
+    ]
+    consistencyPolicy: {
+      defaultConsistencyLevel: 'Session'
+    }
+  }
+}
+
+resource cosmosDatabase 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2024-05-15' = {
+  parent: cosmosAccount
+  name: cosmosDatabaseName
+  properties: {
+    resource: {
+      id: cosmosDatabaseName
+    }
+  }
+}
+
+resource cosmosGarmentContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-05-15' = {
+  parent: cosmosDatabase
+  name: cosmosGarmentContainerName
+  properties: {
+    resource: {
+      id: cosmosGarmentContainerName
+      partitionKey: {
+        paths: [
+          '/userId'
+        ]
+        kind: 'Hash'
+      }
+    }
+  }
+}
+
+// Cosmos DB data-plane RBAC uses its own resource type (sqlRoleAssignments), not the
+// generic Microsoft.Authorization/roleAssignments used for Key Vault/OpenAI above —
+// grants the App Service managed identity read/write on this account only.
+resource cosmosDataContributorAssignment 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2024-05-15' = {
+  parent: cosmosAccount
+  name: guid(cosmosAccount.id, appService.id, cosmosBuiltInDataContributorRoleId)
+  properties: {
+    roleDefinitionId: '${cosmosAccount.id}/sqlRoleDefinitions/${cosmosBuiltInDataContributorRoleId}'
+    principalId: appService.identity.principalId
+    scope: cosmosAccount.id
+  }
+}
+
+// Storage account — backs IImageStore (API #2) for garment photo blobs.
+// storageSkuName varies by stage (LRS dev / ZRS gamma / GRS live, set in the
+// parameters/<stage>.bicepparam files) for increasing durability up the chain.
+resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
+  name: storageAccountName
+  location: location
+  kind: 'StorageV2'
+  sku: {
+    name: storageSkuName
+  }
+  properties: {
+    minimumTlsVersion: 'TLS1_2'
+    allowBlobPublicAccess: true
+    publicNetworkAccess: 'Enabled'
+  }
+}
+
+// allowBlobPublicAccess above only permits it; public access level is set per-container
+// below — anonymous read on blobs only (not container listing), since Garment.ImageUrl
+// is a plain URL stored permanently and can't depend on an expiring SAS token.
+resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01' = {
+  parent: storageAccount
+  name: 'default'
+}
+
+resource garmentImagesContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  parent: blobService
+  name: garmentImagesContainerName
+  properties: {
+    publicAccess: 'Blob'
+  }
+}
+
+// Grants the App Service managed identity read/write on blob data in this account only —
+// same DefaultAzureCredential pattern as Key Vault and Azure OpenAI above, no keys stored.
+resource storageBlobDataContributorAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(storageAccount.id, appService.id, storageBlobDataContributorRoleId)
+  scope: storageAccount
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDataContributorRoleId)
+    principalId: appService.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
 // Azure Static Web Apps — hosts the Next.js frontend for this stage.
 // Standard SKU is required for Next.js SSR (App Router, dynamic routes).
 // Free SKU only supports purely static output and cannot serve server-rendered pages.
@@ -235,3 +360,9 @@ output openAiEndpoint string = openAiAccount.properties.endpoint
 output openAiDeploymentName string = visionModelDeployment.name
 output staticWebAppName string = staticWebApp.name
 output staticWebAppHostName string = staticWebApp.properties.defaultHostname
+output cosmosEndpoint string = cosmosAccount.properties.documentEndpoint
+output cosmosDatabaseName string = cosmosDatabaseName
+output cosmosContainerName string = cosmosGarmentContainerName
+output storageAccountName string = storageAccount.name
+output storageBlobServiceUri string = storageAccount.properties.primaryEndpoints.blob
+output storageContainerName string = garmentImagesContainerName

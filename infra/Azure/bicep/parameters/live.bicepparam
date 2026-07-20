@@ -5,6 +5,7 @@ param location = 'canadacentral'
 param appServicePlanSkuName = 'P1v3'
 param appServicePlanSkuTier = 'PremiumV3'
 param enablePurgeProtection = true
+param storageSkuName = 'Standard_GRS'
 
 param staticWebAppSkuName = 'Standard'
 param staticWebAppLocation = 'eastus2'

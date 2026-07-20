@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 #
 # Tears down everything dev-create.sh deployed. Deletes the rg-robe-dev
-# resource group (Key Vault, App Service, Plan, App Insights, Azure OpenAI)
-# in one shot.
+# resource group (Key Vault, App Service, Plan, App Insights, Azure OpenAI,
+# Cosmos DB, Storage account) in one shot. Cosmos DB and Storage have no
+# soft-delete/purge step (unlike Key Vault and Azure OpenAI below) — they're
+# gone for good as soon as the resource group delete completes.
 #
 # Dev has Key Vault purge protection OFF, so the deleted vault soft-deletes
 # instead of disappearing immediately — the name kv-robeai-dev stays reserved
