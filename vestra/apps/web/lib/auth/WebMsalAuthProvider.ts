@@ -29,6 +29,18 @@ function realClaim(value: string | undefined): string | undefined {
   return trimmed;
 }
 
+// When no real email/preferred_username claim is present, MSAL's account.username
+// for a CIAM-federated (social) account falls back to a synthetic UPN of the form
+// "<oid-guid>@<tenant>.onmicrosoft.com" — it passes a naive "contains @" check but
+// is just the object ID reformatted, not anything a user would recognize as theirs.
+const GUID_LOCAL_PART = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}@/i;
+
+function plausibleEmail(value: string | undefined): string | undefined {
+  const trimmed = realClaim(value);
+  if (!trimmed || !trimmed.includes("@") || GUID_LOCAL_PART.test(trimmed)) return undefined;
+  return trimmed;
+}
+
 function accountToUser(account: AccountInfo, provider: AuthProvider): CurrentUser {
   const c = account.idTokenClaims as Record<string, unknown> | undefined;
 
@@ -41,9 +53,9 @@ function accountToUser(account: AccountInfo, provider: AuthProvider): CurrentUse
   const family = realClaim(c?.["family_name"] as string | undefined);
   const full   = given && family ? `${given} ${family}` : given ?? family;
   const email  =
-    (c?.["email"] as string | undefined) ||
-    (c?.["preferred_username"] as string | undefined) ||
-    (account.username?.includes("@") ? account.username : undefined);
+    plausibleEmail(c?.["email"] as string | undefined) ||
+    plausibleEmail(c?.["preferred_username"] as string | undefined) ||
+    plausibleEmail(account.username);
   const name   =
     full ||
     realClaim(c?.["name"] as string | undefined) ||
@@ -92,7 +104,10 @@ export class WebMsalAuthProvider implements IAuthProvider {
   async signIn(provider: AuthProvider): Promise<void> {
     const domainHint = DOMAIN_HINTS[provider];
     const result = await this.pca.loginPopup({
-      scopes: ["openid", "offline_access"],
+      // "profile"/"email" scopes are what actually make Entra release the
+      // name/given_name/family_name/email claims into the ID token — without
+      // them the token stays sparse regardless of the user flow's claim config.
+      scopes: ["openid", "profile", "email", "offline_access"],
       redirectUri: this.blankRedirectUri,
       ...(domainHint ? { domainHint } : {}),
     });
@@ -117,7 +132,7 @@ export class WebMsalAuthProvider implements IAuthProvider {
     try {
       const result = await this.pca.acquireTokenSilent({
         account,
-        scopes: ["openid"],
+        scopes: ["openid", "profile", "email"],
       });
       this._cachedIdToken = result.idToken;
       return result.idToken;
@@ -125,7 +140,7 @@ export class WebMsalAuthProvider implements IAuthProvider {
       if (e instanceof InteractionRequiredAuthError) {
         const result = await this.pca.acquireTokenPopup({
           account,
-          scopes: ["openid"],
+          scopes: ["openid", "profile", "email"],
           redirectUri: this.blankRedirectUri,
         });
         this._cachedIdToken = result.idToken;

@@ -106,6 +106,16 @@ public interface ITraitsExtractor
 }
 // impls: AzureOpenAITraitsExtractor | ClaudeTraitsExtractor | FakeTraitsExtractor
 
+// ---- API #1 (extension): multi-image, multi-person fashion extraction ----
+public interface IFashionTraitsExtractor
+{
+    Task<TraitsExtractionResult> ExtractTraitsAsync(
+        IReadOnlyCollection<FashionImageInput> images,
+        CancellationToken cancellationToken = default);
+}
+// impls: AzureOpenAITraitsExtractor (implements both ITraitsExtractor and
+// IFashionTraitsExtractor off the same Azure OpenAI call) | FakeFashionTraitsExtractor
+
 // ---- API #2: storage + auth ----
 public interface IGarmentRepository
 {
@@ -659,6 +669,114 @@ Tests to show passing:
 - non-clothing image → `422`
 - missing/oversized image → `400`
 - malformed model output → handled gracefully, no 500 leak
+
+### API #1 (extension) — multi-image, multi-person fashion extraction  ✅ DONE
+
+`ITraitsExtractor` above returns one garment from one image with no concept of
+"whose garment is this." Real wardrobe photos are often group shots or outfit
+flat-lays with several people, so `AzureOpenAITraitsExtractor` also implements a
+second interface, `IFashionTraitsExtractor`, over the same Azure OpenAI call —
+returning traits **per person per image**, across up to `MaxImages` images in one
+request. Stateless, same as `/analyze`: no DB, no auth required.
+
+**Depends on (inject):** `IFashionTraitsExtractor`
+
+**`POST /api/garments/analyze-batch`**
+
+Request:
+```jsonc
+{
+  "images": [
+    { "imageId": "img-1", "imageBase64": "<...>", "mimeType": "image/jpeg" },
+    { "imageId": "img-2", "imageBase64": "<...>", "mimeType": "image/jpeg" }
+  ]
+}
+```
+`imageId` is optional per image — auto-assigned as `img-1`, `img-2`, ... if omitted.
+Max 10 images per request (`MaxImagesPerBatch`), each ≤ 10 MB, `image/jpeg` |
+`image/png` | `image/webp` only.
+
+Response `200`:
+```jsonc
+{
+  "images": [
+    {
+      "imageId": "img-1",
+      "people": [
+        {
+          "personId": "person_1",
+          "position": "center",
+          "overallStyle": ["casual"],
+          "styleTags": ["casual", "minimalist"],
+          "clothingItems": [
+            {
+              "category": "top",
+              "type": "t-shirt",
+              "subtype": null,
+              "primaryColor": { "normalized": "blue", "shade": "navy blue" },
+              "secondaryColors": [],
+              "pattern": "solid",
+              "material": "cotton-like",
+              "fit": "regular",
+              "length": null, "sleeveLength": "short", "neckline": "round",
+              "collarType": null, "waistRise": null, "closureType": null,
+              "details": [], "visibleText": null, "brand": null, "logo": null,
+              "condition": "good",
+              "styleTags": ["casual"],
+              "confidence": 0.92
+            }
+          ],
+          "overallConfidence": 0.90
+        }
+      ],
+      "warnings": []
+    }
+  ],
+  "modelVersion": "azure-openai-gpt-5-mini"
+}
+```
+`category` covers `top | bottom | dress | skirt | outerwear | footwear | headwear
+| accessory | one-piece | traditional-wear | unknown` — including South Asian
+garments (saree, kurta, kurti, salwar, lehenga, sherwani, dhoti, ...) with
+saree-specific detail (body/border/pallu color, zari, drape style) captured via
+the free-form `type`/`details` fields. This is a superset of the `GarmentTraits`
+category enum, not a replacement — `ITraitsExtractor.ExtractAsync` (single-image
+API) still maps into the narrower `GarmentTraits.Category` enum via
+`ParseCategory`.
+
+**People vs. faces — deliberate privacy boundary.** The extractor detects that a
+person is present (to group clothing items per person) but is explicitly barred
+from identity inference. The system prompt enforces:
+```
+- Do NOT identify, recognize, or name any individual person.
+- Do NOT perform face recognition.
+- Do NOT infer ethnicity, religion, health status, sexual orientation, or any sensitive attribute.
+```
+A person is represented only as `personId` (`person_1`, `person_2`, ... — stable
+only *within* one image, not across images) and coarse `position`
+(`left | center | right | upper-left | upper-right | lower-left | lower-right`).
+No face embeddings, no biometric data, no demographic attributes are extracted or
+stored. **Working rule**: if this prompt is ever edited, keep these constraints —
+they're a privacy boundary, not incidental wording.
+
+Errors: `400` (bad/missing/oversized/too-many images), `502` (model call failed,
+malformed model output, or content filtered).
+
+Tests to show passing (`GarmentBatchAnalyzeTests.cs`):
+- valid images → `200` with per-image, per-person, per-garment results
+- results contain people and clothing items with expected fields populated
+- omitted `imageId` → auto-assigned (`img-1`, `img-2`, ...)
+- empty/missing images list → `400`
+- too many images (> `MaxImagesPerBatch`) → `400`
+- invalid base64 / oversized image / unsupported mime type → `400`
+- model call failure / malformed model output / content filtered → `502`
+
+New domain types (`Robe.Core.Domain`): `FashionImageInput`,
+`TraitsExtractionResult`, `ImageTraitsResult`, `PersonTraits`,
+`ClothingItemTraits`, `ColorTraits` — see `IFashionTraitsExtractor` above for the
+interface. Not aliases of `GarmentTraits`/`ImageInput`; kept as separate types
+since this extraction is richer (per-person, more garment attributes) than what
+API #2's storage model (`GarmentTraits`) needs.
 
 ---
 

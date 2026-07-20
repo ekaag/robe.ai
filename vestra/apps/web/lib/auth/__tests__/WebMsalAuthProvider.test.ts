@@ -132,6 +132,18 @@ describe("WebMsalAuthProvider", () => {
       await provider.signIn("google");
       expect(provider.currentUser?.name).toBeUndefined();
     });
+
+    it("ignores a synthetic '<oid>@tenant.onmicrosoft.com' username instead of showing the GUID as the name", async () => {
+      const sparseAccount = {
+        ...mockAccount,
+        name: "Unknown",
+        username: "104651bd-30d2-4f1a-9c3e-8a2b6c7d9e10@vestraoauth.onmicrosoft.com",
+        idTokenClaims: { idp: "google", name: "Unknown" },
+      };
+      mockPca.loginPopup.mockResolvedValueOnce({ accessToken: "token", account: sparseAccount });
+      await provider.signIn("google");
+      expect(provider.currentUser?.name).toBeUndefined();
+    });
   });
 
   describe("signOut()", () => {
