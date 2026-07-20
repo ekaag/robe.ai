@@ -209,6 +209,50 @@ public class ObservableTraitsExtractorTests
     }
 }
 
+public class ObservableFashionTraitsExtractorTests
+{
+    private readonly LocalLogService _log = new(NullLogger<LocalLogService>.Instance, new AsyncLocalCorrelationContextAccessor());
+    private readonly LocalMetricsService _metrics = new(NullLogger<LocalMetricsService>.Instance, new AsyncLocalCorrelationContextAccessor());
+    private readonly LocalAlertService _alerts = new(NullLogger<LocalAlertService>.Instance, new AsyncLocalCorrelationContextAccessor());
+
+    private static readonly List<FashionImageInput> Images = new()
+    {
+        new FashionImageInput("img-1", new byte[16], "image/jpeg"),
+        new FashionImageInput("img-2", new byte[16], "image/jpeg"),
+    };
+
+    [Fact]
+    public async Task ExtractTraitsAsync_OnSuccess_RecordsDurationCountsAndLogsInfo()
+    {
+        var decorator = new ObservableFashionTraitsExtractor(FakeFashionTraitsExtractor.ReturnsDefault(), _log, _metrics, _alerts);
+
+        var result = await decorator.ExtractTraitsAsync(Images);
+
+        Assert.NotNull(result);
+        Assert.Contains(_metrics.RecentEntries, m => m.Name == "fashion_traits.extract_duration_ms" && m.Kind == MetricKind.Value);
+        Assert.Contains(_metrics.RecentEntries, m => m.Name == "fashion_traits.analyzed" && m.Kind == MetricKind.Counter);
+        Assert.Contains(_metrics.RecentEntries, m => m.Name == "fashion_traits.people_detected");
+        Assert.Contains(_metrics.RecentEntries, m => m.Name == "fashion_traits.items_detected");
+        Assert.Contains(_metrics.RecentEntries, m => m.Tags?.GetValueOrDefault("imageCount") == "2");
+        Assert.Contains(_log.RecentEntries, e => e.Severity == LogSeverity.Information);
+        Assert.Empty(_alerts.RecentEntries);
+    }
+
+    [Fact]
+    public async Task ExtractTraitsAsync_OnFailure_IncrementsFailureCounterLogsErrorAndRaisesAlert_ThenRethrows()
+    {
+        var thrown = new InvalidOperationException("Azure OpenAI call failed.");
+        var decorator = new ObservableFashionTraitsExtractor(FakeFashionTraitsExtractor.Throws(thrown), _log, _metrics, _alerts);
+
+        var actual = await Assert.ThrowsAsync<InvalidOperationException>(() => decorator.ExtractTraitsAsync(Images));
+
+        Assert.Same(thrown, actual);
+        Assert.Contains(_metrics.RecentEntries, m => m.Name == "fashion_traits.failed");
+        Assert.Contains(_log.RecentEntries, e => e.Severity == LogSeverity.Error && e.Exception == thrown);
+        Assert.Single(_alerts.RecentEntries);
+    }
+}
+
 public class ObservableProfileGeneratorTests
 {
     private readonly LocalLogService _log = new(NullLogger<LocalLogService>.Instance, new AsyncLocalCorrelationContextAccessor());

@@ -10,15 +10,19 @@ namespace Robe.Infrastructure.TraitsExtraction.Azure;
 /// DI registration helpers for <see cref="AzureOpenAITraitsExtractor"/>.
 /// Call <see cref="AddAzureOpenAITraitsExtractor"/> in the non-local-fakes branch
 /// of <c>Program.cs</c>, then wrap the resulting singleton with
-/// <c>ObservableTraitsExtractor</c> as usual.
+/// <c>ObservableTraitsExtractor</c> (for <see cref="ITraitsExtractor"/>) and
+/// <c>ObservableFashionTraitsExtractor</c> (for <see cref="IFashionTraitsExtractor"/>)
+/// as usual — this method only registers the concrete Azure implementation, not
+/// either public interface, so Program.cs decides observability wrapping for both.
 /// </summary>
 public static class AzureOpenAITraitsExtractorExtensions
 {
     /// <summary>
     /// Registers <see cref="AzureOpenAIOptions"/>, the internal
     /// <see cref="IAzureOpenAIChatAdapter"/>, and
-    /// <see cref="AzureOpenAITraitsExtractor"/> as singletons.
-    /// Also registers <see cref="IFashionTraitsExtractor"/> pointing to the same singleton.
+    /// <see cref="AzureOpenAITraitsExtractor"/> as singletons. Does not register
+    /// <see cref="ITraitsExtractor"/> or <see cref="IFashionTraitsExtractor"/> —
+    /// Program.cs wires both, each behind its own Observable decorator.
     /// </summary>
     public static IServiceCollection AddAzureOpenAITraitsExtractor(
         this IServiceCollection services,
@@ -37,10 +41,6 @@ public static class AzureOpenAITraitsExtractorExtensions
             sp.GetRequiredService<IOptions<AzureOpenAIOptions>>(),
             sp.GetRequiredService<ILogger<AzureOpenAITraitsExtractor>>(),
             sp.GetRequiredService<IAzureOpenAIChatAdapter>()));
-
-        // IFashionTraitsExtractor resolves to the same singleton.
-        services.AddSingleton<IFashionTraitsExtractor>(
-            sp => sp.GetRequiredService<AzureOpenAITraitsExtractor>());
 
         return services;
     }

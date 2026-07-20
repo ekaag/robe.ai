@@ -358,14 +358,30 @@ See "Dependency model" above for the four interfaces.
 
 Instrumentation is added via **decorators**, not by touching controllers
 (respects "don't modify already-approved APIs"):
-- `ObservableTraitsExtractor`, `ObservableProfileGenerator`,
-  `ObservableRecommender`, `ObservableGarmentRepository`,
-  `ObservableSecretManager`
+- `ObservableTraitsExtractor`, `ObservableFashionTraitsExtractor`,
+  `ObservableProfileGenerator`, `ObservableRecommender`,
+  `ObservableGarmentRepository`, `ObservableSecretManager`
   (`robe.infrastructure/Observability/Decorators/`) wrap the real/fake
   implementation, recording duration + success/failure counters + domain
   counters (`garment_traits.analyzed`, `profile.generated`,
   `recommendations.served`, `garments.stored`, `secret.fetched`, ...), and call
   `IAlertService.RaiseAsync` when the wrapped call throws.
+- `ObservableFashionTraitsExtractor` wraps `IFashionTraitsExtractor` (the
+  `/analyze-batch` path) the same way — `fashion_traits.extract_duration_ms`
+  (tagged with `imageCount`, so duration can be correlated against batch size),
+  `fashion_traits.analyzed`/`fashion_traits.failed` counters, and
+  `fashion_traits.people_detected`/`fashion_traits.items_detected` value
+  metrics per call. Added after `analyze-batch` shipped without it — until then
+  `AddAzureOpenAITraitsExtractor` registered the raw `AzureOpenAITraitsExtractor`
+  singleton directly against `IFashionTraitsExtractor`, so there was no
+  duration/failure telemetry for the batch path at all, only the extractor's own
+  "Fashion traits extraction completed... in {ElapsedMs}ms" log line. **Working
+  rule**: `AddAzureOpenAITraitsExtractor` (`robe.infrastructure/TraitsExtraction/Azure/AzureOpenAITraitsExtractorExtensions.cs`)
+  only registers the concrete `AzureOpenAITraitsExtractor` singleton — it does
+  NOT register either `ITraitsExtractor` or `IFashionTraitsExtractor`. Program.cs
+  wires both interfaces itself, each behind its own Observable decorator, so a
+  new interface added to that extractor later doesn't silently ship unwrapped
+  the way `IFashionTraitsExtractor` originally did.
 - `CorrelationIdMiddleware` (`robe.api/Middleware/`) is the **first**
   middleware in the pipeline (before `UseSwagger`/`UseCors`/auth) so every
   request — including failed CORS preflights and 401s — gets a correlation ID
@@ -796,6 +812,27 @@ above for the interface. Not aliases of `GarmentTraits`/`ImageInput`; kept as
 separate types since this extraction is richer (per-person, more garment
 attributes, spatial location) than what API #2's storage model (`GarmentTraits`)
 needs — `GarmentTraits` intentionally has no bounding box field.
+
+**Known performance characteristic — ~15s for 2-3 images.** All of it is one
+`await` in `AzureOpenAITraitsExtractor.ExtractTraitsAsync` →
+`_chat.CompleteChatAsync` (`AzureOpenAIChatAdapter.cs`) — the single Azure
+OpenAI network round trip; request-building and response-parsing on either side
+are low-single-digit-ms. Three compounding factors, not yet addressed:
+1. `AzureOpenAIChatAdapter.cs` sends every image at `ChatImageDetailLevel.High`
+   — the most expensive vision detail mode (tiles each image into 512px
+   segments, multiplying tokens/processing time per image).
+2. No image resizing/compression anywhere in the pipeline — the web client
+   base64-encodes the raw file with no downscaling, and the backend accepts up
+   to 10 MB/image with no resize step before forwarding to Azure OpenAI.
+3. The output schema is large and generated per person per item (18+ fields
+   plus `boundingBox`/`faceBoundingBox`) — LLM output is autoregressive, so
+   this is typically the slowest part of a call, and scales with
+   people/items detected across the batch.
+
+Use `fashion_traits.extract_duration_ms` (tagged `imageCount`, see
+"Observability" below) to measure before/after if addressing this — candidate
+fixes are switching `ChatImageDetailLevel.High` → `Auto`/`Low` and/or
+downscaling images before sending, neither implemented yet.
 
 ### Frontend: visual overlay (faces + garments on the image)  ✅ DONE
 

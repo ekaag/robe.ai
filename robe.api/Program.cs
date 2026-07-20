@@ -220,7 +220,11 @@ if (useLocalFakes)
         sp.GetRequiredService<ILogService>(),
         sp.GetRequiredService<IMetricsService>(),
         sp.GetRequiredService<IAlertService>()));
-    builder.Services.AddSingleton<IFashionTraitsExtractor>(FakeFashionTraitsExtractor.ReturnsDefault());
+    builder.Services.AddSingleton<IFashionTraitsExtractor>(sp => new ObservableFashionTraitsExtractor(
+        FakeFashionTraitsExtractor.ReturnsDefault(),
+        sp.GetRequiredService<ILogService>(),
+        sp.GetRequiredService<IMetricsService>(),
+        sp.GetRequiredService<IAlertService>()));
     builder.Services.AddSingleton<IGarmentRepository>(sp => new ObservableGarmentRepository(
         new InMemoryGarmentRepository(),
         sp.GetRequiredService<ILogService>(),
@@ -266,6 +270,11 @@ else
 
     builder.Services.AddAzureOpenAITraitsExtractor(builder.Configuration);
     builder.Services.AddScoped<ITraitsExtractor>(sp => new ObservableTraitsExtractor(
+        sp.GetRequiredService<AzureOpenAITraitsExtractor>(),
+        sp.GetRequiredService<ILogService>(),
+        sp.GetRequiredService<IMetricsService>(),
+        sp.GetRequiredService<IAlertService>()));
+    builder.Services.AddScoped<IFashionTraitsExtractor>(sp => new ObservableFashionTraitsExtractor(
         sp.GetRequiredService<AzureOpenAITraitsExtractor>(),
         sp.GetRequiredService<ILogService>(),
         sp.GetRequiredService<IMetricsService>(),
