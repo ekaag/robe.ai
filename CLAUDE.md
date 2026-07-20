@@ -811,9 +811,43 @@ which would be wrong whenever the image is letterboxed.
 Wired into `BatchReview` (`UploadFlow.tsx`) in place of the old 52×52 thumbnail —
 each image in the batch-review step now shows the full preview with overlays,
 and a clothing item's box is highlighted (`highlighted: true`) when its checkbox
-in the list below is selected. Single-image review (`/analyze`, not `/analyze-batch`)
-is unaffected — scope is batch-only, matching `GarmentTraits` having no bounding
-box field.
+in the list below is selected.
+
+**Update:** the web app's `UploadFlow.tsx` no longer has a separate single-image
+code path at all — it now always calls `/analyze-batch` (a single photo just
+yields a one-image batch result), so every web upload goes through
+`ImageWithOverlay`. See "Web upload consolidation" below. `GarmentTraits` still
+has no bounding box field — `/analyze` (`ITraitsExtractor`) is untouched and
+still backs the mobile app.
+
+### Web upload consolidation: single image now also uses `/analyze-batch`  ✅ DONE
+
+The web app previously had two client-side code paths in `UploadFlow.tsx`: a
+single-image one calling `useAnalyzeGarment` (`/api/garments/analyze`) with its
+own "review" step (`TraitRow`/`FormalityDots`/`ConfidenceBar`), and a batch one
+calling `useAnalyzeBatch` for 2+ files. These duplicated the same job — pick a
+photo, extract traits, let the user confirm, save — so the web app now always
+calls `useAnalyzeBatch`, even for a single file; there's one `handleFileChange`
+path and one review UI (`BatchReview`) regardless of file count.
+
+- **Backend is unchanged**: `POST /api/garments/analyze` and `ITraitsExtractor`
+  still exist — this was a web-app-only consolidation, not a backend one. They
+  still back **`apps/mobile/components/UploadFlow.tsx`** (single-image only, no
+  batch support) and **`infra/Azure/bicep/dev-create.sh`**'s smoke test, both of
+  which call `/analyze` directly. **Working rule**: don't remove `/analyze`,
+  `ITraitsExtractor`, `FakeTraitsExtractor`, `ObservableTraitsExtractor`, or
+  `GarmentAnalyzeTests.cs` without also migrating those two consumers — they
+  were deliberately left out of scope when this consolidation was done.
+- `apps/web/vitest.setup.ts` gained a no-op `ResizeObserver` polyfill (jsdom
+  doesn't have one) — needed once `ImageWithOverlay` started rendering in every
+  upload path, not just the batch-only one, since any test that renders
+  `UploadFlow`'s review step now renders it too.
+- Fixed a pre-existing bug found along the way: `WardrobePage.test.tsx`'s
+  upload-flow tests queried `getByLabelText("Upload garment photo")`
+  (singular) against an input actually labeled `"Upload garment photos"`
+  (plural) — silently broken before this change (the assertion never matched
+  regardless of which endpoint was called). Fixed as part of rewriting those
+  tests for the unified flow.
 
 Not yet regenerated automatically: `packages/types/src/index.ts` and
 `packages/api/src/*` are **hand-maintained**, not consumed from

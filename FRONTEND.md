@@ -291,8 +291,8 @@ Typed client + TanStack Query hooks, behind an interface so it's mockable.
 ```ts
 interface IApiClient {
   getMe(): Promise<MeUser>;                                      // auth check
-  analyzeGarment(image: ImageInput): Promise<GarmentTraits>;     // API #1 single
-  analyzeBatch(images: BatchImageInput[]): Promise<BatchAnalyzeResult>; // API #1 batch
+  analyzeGarment(image: ImageInput): Promise<GarmentTraits>;     // API #1 single — mobile UploadFlow only; web always uses analyzeBatch (see below)
+  analyzeBatch(images: BatchImageInput[]): Promise<BatchAnalyzeResult>; // API #1 batch — web's only extraction call, single photo or many
   addGarment(input: AddGarmentInput): Promise<Garment>;          // API #2
   listGarments(q?: GarmentQuery): Promise<Garment[]>;            // API #2
   getGarment(id: string): Promise<Garment>;                      // API #2
@@ -372,7 +372,7 @@ mobile = bottom tab bar (Closet / Style / Shop). Both gate everything except
 | `Providers` | `components/Providers.tsx` | QueryClient + auth + API client provider wiring |
 | `AuthGuard` | `components/AuthGuard.tsx` | Route gate; redirects unauthenticated to `/login` |
 | `AppShell` | `components/AppShell.tsx` | Left sidebar nav + account footer + sign-out |
-| `UploadFlow` | `components/UploadFlow.tsx` | Multi-step modal supporting single and batch uploads. Single file: pick → analyze → review → save. Batch (2+ files): pick → analyze all → batch-review (per-image/per-person checkboxes) → save selected. Uses `useAnalyzeGarment` for single, `useAnalyzeBatch` for batch. Maps `ClothingItemTraitsResult` → `GarmentTraits` via `mapToGarmentTraits()`. |
+| `UploadFlow` | `components/UploadFlow.tsx` | Multi-step modal: pick → analyze → batch-review (per-image/per-person checkboxes, pre-checked) → save selected. One or many files always go through `useAnalyzeBatch` (`POST /api/garments/analyze-batch`) — a single photo just yields a one-image batch result, so there's one extraction code path instead of a separate single-image flow. (`useAnalyzeGarment`/`/api/garments/analyze` still exists for the mobile app's `UploadFlow`, which hasn't been migrated.) Maps `ClothingItemTraitsResult` → `GarmentTraits` via `mapToGarmentTraits()`. Each image renders via `ImageWithOverlay` (`components/ImageWithOverlay.tsx`), drawing face/garment bounding boxes from `faceBoundingBox`/`boundingBox` on the response; a selected item's box is highlighted. |
 | `GarmentCard` | `components/GarmentCard.tsx` | Grid tile with garment image + primary color badge |
 | `FilterChips` | `components/FilterChips.tsx` | Category filter toggle chips |
 | `AddTile` | `components/AddTile.tsx` | "+" button tile to trigger upload |

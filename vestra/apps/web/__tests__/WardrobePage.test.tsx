@@ -99,9 +99,9 @@ describe("WardrobePage", () => {
     expect(screen.getByText("Add garment", { selector: "h2" })).toBeInTheDocument();
   });
 
-  it("upload flow: file picked → analyze called → review step shown → confirm calls addGarment", async () => {
+  it("upload flow: file picked → analyze-batch called → review step shown → confirm calls addGarment", async () => {
     vi.stubGlobal("FileReader", MockFileReader);
-    const analyzeSpy = vi.spyOn(client, "analyzeGarment");
+    const analyzeSpy = vi.spyOn(client, "analyzeBatch");
     const addSpy = vi.spyOn(client, "addGarment");
 
     wrap(client);
@@ -109,32 +109,34 @@ describe("WardrobePage", () => {
 
     // Open modal
     await userEvent.click(screen.getByLabelText("Add garment"));
-    await waitFor(() => screen.getByLabelText("Upload garment photo"));
+    await waitFor(() => screen.getByLabelText("Upload garment photos"));
 
-    // Upload a file
-    const fileInput = screen.getByLabelText("Upload garment photo");
+    // Upload a single file — still goes through analyze-batch, not a separate single-image endpoint
+    const fileInput = screen.getByLabelText("Upload garment photos");
     const file = new File(["img"], "garment.jpg", { type: "image/jpeg" });
     await userEvent.upload(fileInput, file);
 
-    // Review step should appear with trait rows
-    await waitFor(() => expect(screen.getByText("Category")).toBeInTheDocument());
-    expect(analyzeSpy).toHaveBeenCalledWith({ imageBase64: "abc123", mimeType: "image/jpeg" });
+    // Review step should appear with the extracted item
+    await waitFor(() => expect(screen.getByText("t-shirt")).toBeInTheDocument());
+    expect(analyzeSpy).toHaveBeenCalledWith([
+      { imageId: "img-1", imageBase64: "abc123", mimeType: "image/jpeg" },
+    ]);
 
     // Confirm saves the garment
-    await userEvent.click(screen.getByLabelText("Confirm and save"));
+    await userEvent.click(screen.getByRole("button", { name: /save 1 item/i }));
     await waitFor(() => expect(addSpy).toHaveBeenCalled());
   });
 
   it("upload flow: analyze failure shows error state", async () => {
     vi.stubGlobal("FileReader", MockFileReader);
-    vi.spyOn(client, "analyzeGarment").mockRejectedValue(new Error("model error"));
+    vi.spyOn(client, "analyzeBatch").mockRejectedValue(new Error("model error"));
 
     wrap(client);
     await waitFor(() => screen.getByLabelText("Add garment"));
     await userEvent.click(screen.getByLabelText("Add garment"));
-    await waitFor(() => screen.getByLabelText("Upload garment photo"));
+    await waitFor(() => screen.getByLabelText("Upload garment photos"));
 
-    const fileInput = screen.getByLabelText("Upload garment photo");
+    const fileInput = screen.getByLabelText("Upload garment photos");
     const file = new File(["img"], "garment.jpg", { type: "image/jpeg" });
     await userEvent.upload(fileInput, file);
 

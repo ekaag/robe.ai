@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { useAnalyzeGarment, useAnalyzeBatch, useAddGarment } from "@vestra/api";
+import { useAnalyzeBatch, useAddGarment } from "@vestra/api";
 import type {
   GarmentTraits,
   BatchImageInput,
@@ -14,12 +14,11 @@ import type {
   Season,
   Occasion,
 } from "@vestra/types";
-import { TraitRow } from "./TraitRow";
-import { FormalityDots } from "./FormalityDots";
-import { ConfidenceBar } from "./ConfidenceBar";
 import { ImageWithOverlay, type FaceMarker, type GarmentMarker } from "./ImageWithOverlay";
 
-type Step = "pick" | "analyzing" | "review" | "batch-review" | "saving" | "error";
+// All uploads — single image or several — go through /analyze-batch so there's
+// one extraction code path; a single photo just yields a one-image batch result.
+type Step = "pick" | "analyzing" | "batch-review" | "saving" | "error";
 
 interface BatchImageData {
   imageId: string;
@@ -69,20 +68,12 @@ function readFileAsDataURL(file: File): Promise<string> {
 }
 
 export function UploadFlow({ open, onClose }: UploadFlowProps) {
-  const analyzeGarment = useAnalyzeGarment();
   const analyzeBatch = useAnalyzeBatch();
   const add = useAddGarment();
 
   const [step, setStep] = useState<Step>("pick");
   const [selectedFileCount, setSelectedFileCount] = useState(0);
 
-  // single flow
-  const [imageBase64, setImageBase64] = useState("");
-  const [mimeType, setMimeType] = useState("");
-  const [previewSrc, setPreviewSrc] = useState("");
-  const [traits, setTraits] = useState<GarmentTraits | null>(null);
-
-  // batch flow
   const [batchImages, setBatchImages] = useState<BatchImageData[]>([]);
   const [batchResult, setBatchResult] = useState<BatchAnalyzeResult | null>(null);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
@@ -94,11 +85,7 @@ export function UploadFlow({ open, onClose }: UploadFlowProps) {
   const reset = () => {
     setStep("pick");
     setSelectedFileCount(0);
-    setTraits(null);
     setErrorMsg("");
-    setImageBase64("");
-    setMimeType("");
-    setPreviewSrc("");
     setBatchImages([]);
     setBatchResult(null);
     setSelectedKeys(new Set());
@@ -116,74 +103,46 @@ export function UploadFlow({ open, onClose }: UploadFlowProps) {
     if (files.length === 0) return;
 
     setSelectedFileCount(files.length);
+    setStep("analyzing");
+    try {
+      const readFiles = await Promise.all(
+        files.map(async (file, i) => {
+          const dataUrl = await readFileAsDataURL(file);
+          return {
+            imageId: `img-${i + 1}`,
+            imageBase64: dataUrl.split(",")[1],
+            mimeType: file.type,
+            previewSrc: dataUrl,
+          } satisfies BatchImageData;
+        })
+      );
+      setBatchImages(readFiles);
 
-    if (files.length === 1) {
-      const file = files[0];
-      const dataUrl = await readFileAsDataURL(file);
-      const b64 = dataUrl.split(",")[1];
-      setImageBase64(b64);
-      setMimeType(file.type);
-      setPreviewSrc(dataUrl);
-      setStep("analyzing");
-      try {
-        const extracted = await analyzeGarment.mutateAsync({ imageBase64: b64, mimeType: file.type });
-        setTraits(extracted);
-        setStep("review");
-      } catch {
-        setErrorMsg("Could not analyze garment. Try a clearer photo.");
-        setStep("error");
-      }
-    } else {
-      setStep("analyzing");
-      try {
-        const readFiles = await Promise.all(
-          files.map(async (file, i) => {
-            const dataUrl = await readFileAsDataURL(file);
-            return {
-              imageId: `img-${i + 1}`,
-              imageBase64: dataUrl.split(",")[1],
-              mimeType: file.type,
-              previewSrc: dataUrl,
-            } satisfies BatchImageData;
-          })
-        );
-        setBatchImages(readFiles);
+      const batchInputs: BatchImageInput[] = readFiles.map((img) => ({
+        imageId: img.imageId,
+        imageBase64: img.imageBase64,
+        mimeType: img.mimeType,
+      }));
 
-        const batchInputs: BatchImageInput[] = readFiles.map((img) => ({
-          imageId: img.imageId,
-          imageBase64: img.imageBase64,
-          mimeType: img.mimeType,
-        }));
+      const result = await analyzeBatch.mutateAsync(batchInputs);
+      setBatchResult(result);
 
-        const result = await analyzeBatch.mutateAsync(batchInputs);
-        setBatchResult(result);
-
-        const allKeys = new Set<string>();
-        for (const img of result.images) {
-          for (const person of img.people) {
-            for (let i = 0; i < person.clothingItems.length; i++) {
-              allKeys.add(`${img.imageId}:${person.personId}:${i}`);
-            }
+      const allKeys = new Set<string>();
+      for (const img of result.images) {
+        for (const person of img.people) {
+          for (let i = 0; i < person.clothingItems.length; i++) {
+            allKeys.add(`${img.imageId}:${person.personId}:${i}`);
           }
         }
-        setSelectedKeys(allKeys);
-        setStep("batch-review");
-      } catch {
-        setErrorMsg("Could not analyze images. Make sure each file is a clear photo of clothing.");
-        setStep("error");
       }
-    }
-  };
-
-  const handleSingleSave = async () => {
-    if (!traits) return;
-    setStep("saving");
-    try {
-      await add.mutateAsync({ traits, imageBase64, mimeType });
-      reset();
-      onClose();
+      setSelectedKeys(allKeys);
+      setStep("batch-review");
     } catch {
-      setErrorMsg("Failed to save garment. Please try again.");
+      setErrorMsg(
+        files.length === 1
+          ? "Could not analyze garment. Try a clearer photo."
+          : "Could not analyze images. Make sure each file is a clear photo of clothing."
+      );
       setStep("error");
     }
   };
@@ -343,57 +302,6 @@ export function UploadFlow({ open, onClose }: UploadFlowProps) {
               : saveProgress.total > 1
               ? `Saving ${saveProgress.done + 1} of ${saveProgress.total} items…`
               : "Saving…"}
-          </div>
-        )}
-
-        {/* single review */}
-        {step === "review" && traits && (
-          <div>
-            {previewSrc && (
-              <img
-                src={previewSrc}
-                alt="Garment preview"
-                style={{
-                  width: "100%",
-                  maxHeight: "240px",
-                  objectFit: "contain",
-                  borderRadius: "0.625rem",
-                  marginBottom: "1rem",
-                  background: "var(--color-bg2)",
-                }}
-              />
-            )}
-            <TraitRow
-              label="Category"
-              value={traits.subcategory ? `${traits.category} · ${traits.subcategory}` : traits.category}
-            />
-            <TraitRow label="Color" value={traits.primaryColor.name} />
-            <TraitRow label="Pattern" value={traits.pattern} />
-            {traits.material && <TraitRow label="Material" value={traits.material} />}
-            {traits.fit && <TraitRow label="Fit" value={traits.fit} />}
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                padding: "0.625rem 0",
-                borderBottom: "1px solid var(--color-line)",
-              }}
-            >
-              <span style={{ color: "var(--color-ink2)", fontSize: "0.875rem" }}>Formality</span>
-              <FormalityDots value={traits.formality} />
-            </div>
-            <div style={{ padding: "0.75rem 0 1.25rem" }}>
-              <ConfidenceBar value={traits.confidence} />
-            </div>
-            <div style={{ display: "flex", gap: "0.75rem" }}>
-              <button onClick={handleClose} style={{ ...ghostBtn, flex: 1 }}>
-                Cancel
-              </button>
-              <button onClick={handleSingleSave} aria-label="Confirm and save" style={{ ...primaryBtn, flex: 2 }}>
-                Confirm &amp; save
-              </button>
-            </div>
           </div>
         )}
 
