@@ -6,6 +6,8 @@ param appServicePlanSkuName = 'P1v3'
 param appServicePlanSkuTier = 'PremiumV3'
 param enablePurgeProtection = true
 param storageSkuName = 'Standard_GRS'
+// canadacentral hit a capacity outage for zone-redundant Cosmos accounts — eastus works.
+param cosmosLocation = 'eastus'
 
 param staticWebAppSkuName = 'Standard'
 param staticWebAppLocation = 'eastus2'

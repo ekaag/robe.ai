@@ -57,6 +57,9 @@ param entraApiScope string = ''
 @description('Storage account redundancy SKU for garment image blobs. LRS for dev, ZRS for gamma, GRS for live.')
 param storageSkuName string = 'Standard_LRS'
 
+@description('Region for the Cosmos DB account. canadacentral has hit capacity limits for this subscription ("high demand ... for the zonal redundant (Availability Zones) accounts, and cannot fulfill your request") — same flavor of regional constraint as Azure OpenAI quota above; eastus has broader availability.')
+param cosmosLocation string = 'canadacentral'
+
 var keyVaultSecretsUserRoleId = '4633458b-17de-408a-b874-0445c86b69e6'
 var cognitiveServicesOpenAiUserRoleId = '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd'
 var cosmosBuiltInDataContributorRoleId = '00000000-0000-0000-0000-000000000002'
@@ -212,14 +215,17 @@ resource openAiUserAssignment 'Microsoft.Authorization/roleAssignments@2022-04-0
 // all scope by userId), so single-partition point reads/queries cover the hot path.
 resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' = {
   name: 'cosmos-robe-${stageName}'
-  location: location
+  location: cosmosLocation
   kind: 'GlobalDocumentDB'
   properties: {
     databaseAccountOfferType: 'Standard'
     locations: [
       {
-        locationName: location
+        locationName: cosmosLocation
         failoverPriority: 0
+        // Not needed for a single-region serverless dev/gamma account, and disabling it
+        // avoids the zone-redundant capacity constraint noted on cosmosLocation above.
+        isZoneRedundant: false
       }
     ]
     capabilities: [

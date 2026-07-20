@@ -27,6 +27,9 @@ param location string = 'canadacentral'
 @description('Region for all Azure OpenAI accounts. Must have gpt-5-mini GlobalStandard quota allocated.')
 param openAiLocation string = 'canadacentral'
 
+@description('Region for all Cosmos DB accounts. canadacentral has hit zone-redundant capacity limits for this subscription.')
+param cosmosLocation string = 'canadacentral'
+
 @description('Region for all Azure Static Web Apps. SWA is not available in canadacentral.')
 param staticWebAppLocation string = 'eastus2'
 
@@ -71,6 +74,7 @@ module devStage 'modules/stage.bicep' = {
     entraClientId: entraClientId
     entraApiScope: entraApiScope
     storageSkuName: 'Standard_LRS'
+    cosmosLocation: cosmosLocation
   }
 }
 
@@ -91,6 +95,7 @@ module gammaStage 'modules/stage.bicep' = {
     entraClientId: entraClientId
     entraApiScope: entraApiScope
     storageSkuName: 'Standard_ZRS'
+    cosmosLocation: cosmosLocation
   }
 }
 
@@ -111,6 +116,7 @@ module liveStage 'modules/stage.bicep' = {
     entraClientId: entraClientId
     entraApiScope: entraApiScope
     storageSkuName: 'Standard_GRS'
+    cosmosLocation: cosmosLocation
   }
 }
 

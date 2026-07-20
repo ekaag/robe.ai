@@ -26,7 +26,18 @@
       "Bash(Sort-Object)",
       "Read(//c/code/ekaag/robe.api/Controllers/**)",
       "Read(//c/code/ekaag/robe.api/Models/**)",
-      "Bash(git branch *)"
+      "Bash(git branch *)",
+      "Bash(az group *)",
+      "Bash(az webapp *)",
+      "Bash(az staticwebapp *)",
+      "Bash(curl -s -i https://app-robe-dev.azurewebsites.net/)",
+      "Bash(az resource *)",
+      "Bash(az keyvault *)",
+      "Bash(az deployment *)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(az cosmosdb *)",
+      "Bash(az monitor *)",
+      "Bash(echo \"delete exit: $?\")"
     ],
     "additionalDirectories": [
       "\\tmp"
