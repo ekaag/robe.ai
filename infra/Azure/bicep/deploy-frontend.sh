@@ -128,9 +128,14 @@ SWA_TOKEN="$(az staticwebapp secrets list \
 
 # Static export (output: "export") produces out/ — point directly at it.
 # skip_app_build ignores output-location; using the out/ dir as app-location is reliable.
+# --env production is required — the SWA CLI defaults to deploying a "preview"
+# environment (a separate preview.<hostname> URL) when --env is omitted, which
+# silently leaves the actual production hostname serving whatever was deployed
+# to it previously instead of this build.
 npx --yes @azure/static-web-apps-cli@latest deploy \
   --app-location "$FRONTEND_DIR/out" \
-  --deployment-token "$SWA_TOKEN"
+  --deployment-token "$SWA_TOKEN" \
+  --env production
 
 echo ""
 echo "==> Done. $STAGE frontend is live at: https://$SWA_HOSTNAME"
