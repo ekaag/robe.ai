@@ -25,7 +25,8 @@
       "Bash(Select-Object -ExpandProperty FullName)",
       "Bash(Sort-Object)",
       "Read(//c/code/ekaag/robe.api/Controllers/**)",
-      "Read(//c/code/ekaag/robe.api/Models/**)"
+      "Read(//c/code/ekaag/robe.api/Models/**)",
+      "Bash(git branch *)"
     ],
     "additionalDirectories": [
       "\\tmp"

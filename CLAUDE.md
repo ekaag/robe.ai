@@ -29,7 +29,9 @@ for status.
 - Cloud: Azure today; every external dependency sits behind an interface so a
   second provider (AWS/GCP) can be added later without touching callers — see
   "Multi-cloud folder convention" in "Secrets & per-stage cloud config" below
-- DB: Azure SQL (relational) or Cosmos DB (NoSQL) + Azure Blob Storage for images
+- DB: Cosmos DB (NoSQL), SQL API — `garments` container partitioned on `/userId`,
+  serverless capacity mode in every stage (see `stage.bicep`) + Azure Blob Storage
+  for images (`garment-images` container, blob-level public read)
 - Auth: Microsoft Entra ID — use Entra External ID (formerly Azure AD B2C) for consumer sign-in; JWT bearer tokens
 - LLM / Vision: Azure OpenAI Service, vision-capable model via the Chat Completions API.
   Current deployment: **gpt-5-mini/2025-08-07** (GlobalStandard, eastus) — vision-capable,
@@ -483,7 +485,15 @@ namespace mirrors its folder (e.g. `Robe.Infrastructure.Persistence.Azure`).
     az keyvault secret set --vault-name kv-robeai-dev --name AzureOpenAI--Endpoint --value <...>
     az keyvault secret set --vault-name kv-robeai-dev --name AzureOpenAI--ApiKey --value <...>
     az keyvault secret set --vault-name kv-robeai-dev --name AzureOpenAI--DeploymentName --value <...>
+    az keyvault secret set --vault-name kv-robeai-dev --name CosmosDb--Endpoint --value <...>
+    az keyvault secret set --vault-name kv-robeai-dev --name CosmosDb--DatabaseName --value robeai
+    az keyvault secret set --vault-name kv-robeai-dev --name CosmosDb--ContainerName --value garments
+    az keyvault secret set --vault-name kv-robeai-dev --name Storage--BlobServiceUri --value <...>
+    az keyvault secret set --vault-name kv-robeai-dev --name Storage--ContainerName --value garment-images
     ```
+    (`dev-create.sh` writes the Cosmos/Storage values above automatically from Bicep
+    outputs, same as it already does for the OpenAI endpoint — populate gamma/live by
+    hand until those stages get their own create script.)
   - Deploy: `az login` → `az account set --subscription <id>` →
     `az deployment sub create --location canadacentral --template-file infra/Azure/bicep/main.bicep`.
   - `infra/Azure/bicep/dev-create.sh` — deploys the dev stage alone, populates
