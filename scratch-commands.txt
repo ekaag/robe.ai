@@ -6,8 +6,8 @@
 # no Azure services, FakeTraitsExtractor / InMemoryGarmentRepository / etc.)
 ASPNETCORE_ENVIRONMENT=Local dotnet run --project robe.api
 
-# Backend — dev Azure stage config (real Key Vault / OpenAI / Blob, requires
-# the dev stage to be deployed and az login with the right subscription)
+# Backend — dev Azure stage config (real Key Vault / OpenAI / Cosmos DB / Blob,
+# requires the dev stage to be deployed and az login with the right subscription)
 ASPNETCORE_ENVIRONMENT=Dev dotnet run --project robe.api
 
 # Frontend — local dev server (reads vestra/apps/web/.env.local)
@@ -24,8 +24,9 @@ pnpm --filter @vestra/web run dev
 # Step 1: Deploy infra + backend (Git Bash, from repo root)
 cd infra/Azure/bicep
 ./dev-create.sh --yes --skip-frontend
-# Creates: rg-robe-dev, Key Vault, App Service, Azure OpenAI, App Insights, SWA
-# Populates: Key Vault secrets, deploys robe.api, runs smoke test
+# Creates: rg-robe-dev, Key Vault, App Service, Azure OpenAI, Cosmos DB,
+#   Storage account, App Insights, SWA
+# Populates: Key Vault secrets (incl. CosmosDb--*/Storage--*), deploys robe.api, runs smoke test
 # --skip-frontend avoids the Windows EPERM symlink error in standalone Next.js build
 
 # Step 2: Deploy frontend (GitHub Actions — runs on Linux, no EPERM)
@@ -151,6 +152,22 @@ az keyvault secret set --vault-name kv-robeai-gamma --name AzureOpenAI--Endpoint
 az keyvault secret set --vault-name kv-robeai-gamma --name AzureOpenAI--DeploymentName --value "gpt-5-mini"
 # No API key needed — managed identity uses Cognitive Services OpenAI User RBAC.
 
+COSMOS_ENDPOINT=$(az deployment group show \
+  --resource-group rg-robe-gamma \
+  --name deploy-stage-gamma \
+  --query "properties.outputs.cosmosEndpoint.value" -o tsv)
+STORAGE_BLOB_URI=$(az deployment group show \
+  --resource-group rg-robe-gamma \
+  --name deploy-stage-gamma \
+  --query "properties.outputs.storageBlobServiceUri.value" -o tsv)
+az keyvault secret set --vault-name kv-robeai-gamma --name CosmosDb--Endpoint       --value "$COSMOS_ENDPOINT"
+az keyvault secret set --vault-name kv-robeai-gamma --name CosmosDb--DatabaseName   --value "robeai"
+az keyvault secret set --vault-name kv-robeai-gamma --name CosmosDb--ContainerName  --value "garments"
+az keyvault secret set --vault-name kv-robeai-gamma --name Storage--BlobServiceUri  --value "$STORAGE_BLOB_URI"
+az keyvault secret set --vault-name kv-robeai-gamma --name Storage--ContainerName   --value "garment-images"
+# No keys/connection strings needed — managed identity uses Cosmos DB Built-in Data
+# Contributor + Storage Blob Data Contributor RBAC.
+
 # Step 3: Deploy robe.api to gamma App Service
 dotnet publish robe.api -c Release -o /tmp/robe-publish
 cd /tmp/robe-publish && zip -r ../robe.zip . && cd -
@@ -180,6 +197,20 @@ AOAI_ENDPOINT=$(az deployment group show \
   --query "properties.outputs.openAiEndpoint.value" -o tsv)
 az keyvault secret set --vault-name kv-robeai-live --name AzureOpenAI--Endpoint       --value "$AOAI_ENDPOINT"
 az keyvault secret set --vault-name kv-robeai-live --name AzureOpenAI--DeploymentName --value "gpt-5-mini"
+
+COSMOS_ENDPOINT=$(az deployment group show \
+  --resource-group rg-robe-live \
+  --name deploy-stage-live \
+  --query "properties.outputs.cosmosEndpoint.value" -o tsv)
+STORAGE_BLOB_URI=$(az deployment group show \
+  --resource-group rg-robe-live \
+  --name deploy-stage-live \
+  --query "properties.outputs.storageBlobServiceUri.value" -o tsv)
+az keyvault secret set --vault-name kv-robeai-live --name CosmosDb--Endpoint       --value "$COSMOS_ENDPOINT"
+az keyvault secret set --vault-name kv-robeai-live --name CosmosDb--DatabaseName   --value "robeai"
+az keyvault secret set --vault-name kv-robeai-live --name CosmosDb--ContainerName  --value "garments"
+az keyvault secret set --vault-name kv-robeai-live --name Storage--BlobServiceUri  --value "$STORAGE_BLOB_URI"
+az keyvault secret set --vault-name kv-robeai-live --name Storage--ContainerName   --value "garment-images"
 
 # Step 3: Deploy robe.api to live App Service
 dotnet publish robe.api -c Release -o /tmp/robe-publish
