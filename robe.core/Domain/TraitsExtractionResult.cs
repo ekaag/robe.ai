@@ -14,7 +14,8 @@ public sealed record PersonTraits(
     IReadOnlyList<string> OverallStyle,
     IReadOnlyList<string> StyleTags,
     IReadOnlyList<ClothingItemTraits> ClothingItems,
-    double OverallConfidence);
+    double OverallConfidence,
+    BoundingBox? FaceBoundingBox = null);
 
 public sealed record ClothingItemTraits(
     string Category,
@@ -37,6 +38,13 @@ public sealed record ClothingItemTraits(
     string? Logo,
     string? Condition,
     IReadOnlyList<string> StyleTags,
-    double Confidence);
+    double Confidence,
+    BoundingBox? BoundingBox = null);
 
 public sealed record ColorTraits(string Normalized, string? Shade);
+
+/// <summary>
+/// Normalized (0-1, top-left origin) bounding box, resolution-independent so the
+/// caller scales it to whatever size the image is actually rendered at.
+/// </summary>
+public sealed record BoundingBox(double X, double Y, double Width, double Height);

@@ -270,7 +270,11 @@ public sealed class AzureOpenAITraitsExtractor : ITraitsExtractor, IFashionTrait
         StyleTags: p.StyleTags ?? (IReadOnlyList<string>)Array.Empty<string>(),
         ClothingItems: (p.ClothingItems ?? Enumerable.Empty<ClothingItemDto>())
             .Select(MapClothingItem).ToList(),
-        OverallConfidence: p.OverallConfidence);
+        OverallConfidence: p.OverallConfidence,
+        FaceBoundingBox: MapBoundingBox(p.FaceBoundingBox));
+
+    private static BoundingBox? MapBoundingBox(BoundingBoxDto? b) =>
+        b is null ? null : new BoundingBox(b.X, b.Y, b.Width, b.Height);
 
     private static ClothingItemTraits MapClothingItem(ClothingItemDto c) => new(
         Category: c.Category ?? "unknown",
@@ -296,7 +300,8 @@ public sealed class AzureOpenAITraitsExtractor : ITraitsExtractor, IFashionTrait
         Logo: c.Logo,
         Condition: c.Condition,
         StyleTags: c.StyleTags ?? (IReadOnlyList<string>)Array.Empty<string>(),
-        Confidence: c.Confidence);
+        Confidence: c.Confidence,
+        BoundingBox: MapBoundingBox(c.BoundingBox));
 
     // -------------------------------------------------------------------------
     // GarmentTraits mapping — for ITraitsExtractor backward compatibility
@@ -422,9 +427,17 @@ public sealed class AzureOpenAITraitsExtractor : ITraitsExtractor, IFashionTrait
         PERSON IDENTIFICATION (per image):
         - Assign stable IDs within the image: person_1, person_2, etc.
         - Position: left | center | right | upper-left | upper-right | lower-left | lower-right
+        - faceBoundingBox: if a face is visible, its location as normalized (0.0-1.0,
+          top-left origin) { "x", "y", "width", "height" } relative to the image
+          dimensions. This is LOCATION ONLY, for drawing a box on screen — never use it
+          to identify, describe, or reason about who the person is. Omit (null) if no
+          face is visible.
 
         CLOTHING ITEM EXTRACTION (for every clearly visible garment):
         category: top | bottom | dress | skirt | outerwear | footwear | headwear | accessory | one-piece | traditional-wear | unknown
+        boundingBox: the garment's location as normalized (0.0-1.0, top-left origin)
+          { "x", "y", "width", "height" } relative to the image dimensions. Omit (null)
+          if you cannot localize it confidently.
         type: t-shirt | shirt | polo | blouse | tank-top | sweater | hoodie | cardigan | blazer | jacket |
               coat | jeans | trousers | chinos | shorts | leggings | joggers | skirt | dress | jumpsuit |
               saree | kurta | kurti | salwar | churidar | dupatta | lehenga | sherwani | dhoti | lungi |
@@ -455,6 +468,7 @@ public sealed class AzureOpenAITraitsExtractor : ITraitsExtractor, IFashionTrait
                   "position": "center",
                   "overallStyle": ["casual"],
                   "styleTags": ["casual", "minimalist"],
+                  "faceBoundingBox": { "x": 0.42, "y": 0.05, "width": 0.16, "height": 0.18 },
                   "clothingItems": [
                     {
                       "category": "top",
@@ -477,7 +491,8 @@ public sealed class AzureOpenAITraitsExtractor : ITraitsExtractor, IFashionTrait
                       "logo": null,
                       "condition": "good",
                       "styleTags": ["casual"],
-                      "confidence": 0.92
+                      "confidence": 0.92,
+                      "boundingBox": { "x": 0.30, "y": 0.22, "width": 0.40, "height": 0.35 }
                     }
                   ],
                   "overallConfidence": 0.90
@@ -514,6 +529,7 @@ public sealed class AzureOpenAITraitsExtractor : ITraitsExtractor, IFashionTrait
         [JsonPropertyName("styleTags")]        public List<string>? StyleTags { get; set; }
         [JsonPropertyName("clothingItems")]    public List<ClothingItemDto>? ClothingItems { get; set; }
         [JsonPropertyName("overallConfidence")] public double OverallConfidence { get; set; }
+        [JsonPropertyName("faceBoundingBox")]  public BoundingBoxDto? FaceBoundingBox { get; set; }
     }
 
     private sealed class ClothingItemDto
@@ -539,11 +555,20 @@ public sealed class AzureOpenAITraitsExtractor : ITraitsExtractor, IFashionTrait
         [JsonPropertyName("condition")]     public string? Condition { get; set; }
         [JsonPropertyName("styleTags")]     public List<string>? StyleTags { get; set; }
         [JsonPropertyName("confidence")]    public double Confidence { get; set; }
+        [JsonPropertyName("boundingBox")]   public BoundingBoxDto? BoundingBox { get; set; }
     }
 
     private sealed class ColorDto
     {
         [JsonPropertyName("normalized")] public string? Normalized { get; set; }
         [JsonPropertyName("shade")]      public string? Shade { get; set; }
+    }
+
+    private sealed class BoundingBoxDto
+    {
+        [JsonPropertyName("x")]      public double X { get; set; }
+        [JsonPropertyName("y")]      public double Y { get; set; }
+        [JsonPropertyName("width")]  public double Width { get; set; }
+        [JsonPropertyName("height")] public double Height { get; set; }
     }
 }

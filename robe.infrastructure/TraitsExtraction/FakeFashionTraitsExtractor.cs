@@ -59,9 +59,11 @@ public class FakeFashionTraitsExtractor : IFashionTraitsExtractor
                             Logo: null,
                             Condition: null,
                             StyleTags: new List<string> { "minimalist" },
-                            Confidence: 0.86)
+                            Confidence: 0.86,
+                            BoundingBox: new BoundingBox(0.30, 0.22, 0.40, 0.55))
                     },
-                    OverallConfidence: 0.86)
+                    OverallConfidence: 0.86,
+                    FaceBoundingBox: new BoundingBox(0.42, 0.05, 0.16, 0.18))
             },
             Warnings: new List<string>()))
             .ToList();

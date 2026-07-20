@@ -17,6 +17,7 @@ import type {
 import { TraitRow } from "./TraitRow";
 import { FormalityDots } from "./FormalityDots";
 import { ConfidenceBar } from "./ConfidenceBar";
+import { ImageWithOverlay, type FaceMarker, type GarmentMarker } from "./ImageWithOverlay";
 
 type Step = "pick" | "analyzing" | "review" | "batch-review" | "saving" | "error";
 
@@ -456,6 +457,21 @@ function BatchReview({ images, result, selectedKeys, onToggle, onCancel, onSave 
         const personCount = imgResult.people.length;
         const itemCount = imgResult.people.reduce((s, p) => s + p.clothingItems.length, 0);
 
+        const faces: FaceMarker[] = imgResult.people
+          .filter((p) => p.faceBoundingBox)
+          .map((p) => ({ box: p.faceBoundingBox! }));
+
+        const garments: GarmentMarker[] = imgResult.people.flatMap((person) =>
+          person.clothingItems
+            .map((item, idx) => ({ item, idx }))
+            .filter(({ item }) => item.boundingBox)
+            .map(({ item, idx }) => ({
+              box: item.boundingBox!,
+              label: item.type,
+              highlighted: selectedKeys.has(`${imgResult.imageId}:${person.personId}:${idx}`),
+            }))
+        );
+
         return (
           <div
             key={imgResult.imageId}
@@ -466,34 +482,27 @@ function BatchReview({ images, result, selectedKeys, onToggle, onCancel, onSave 
             }}
           >
             {/* image header */}
-            <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", marginBottom: "0.75rem" }}>
+            <div style={{ marginBottom: "0.75rem" }}>
               {preview && (
-                <img
+                <ImageWithOverlay
                   src={preview}
                   alt={imgResult.imageId}
-                  style={{
-                    width: 52,
-                    height: 52,
-                    objectFit: "cover",
-                    borderRadius: "0.5rem",
-                    background: "var(--color-bg2)",
-                    flexShrink: 0,
-                  }}
+                  faces={faces}
+                  garments={garments}
+                  style={{ height: 220, marginBottom: "0.5rem" }}
                 />
               )}
-              <div>
-                <div style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--color-ink)" }}>
-                  {imgResult.imageId}
-                </div>
-                <div style={{ fontSize: "0.75rem", color: "var(--color-muted)" }}>
-                  {personCount} {personCount === 1 ? "person" : "people"} · {itemCount} items
-                </div>
-                {imgResult.warnings.map((w, i) => (
-                  <div key={i} style={{ fontSize: "0.75rem", color: "var(--color-accent)", marginTop: "0.25rem" }}>
-                    ⚠ {w}
-                  </div>
-                ))}
+              <div style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--color-ink)" }}>
+                {imgResult.imageId}
               </div>
+              <div style={{ fontSize: "0.75rem", color: "var(--color-muted)" }}>
+                {personCount} {personCount === 1 ? "person" : "people"} · {itemCount} items
+              </div>
+              {imgResult.warnings.map((w, i) => (
+                <div key={i} style={{ fontSize: "0.75rem", color: "var(--color-accent)", marginTop: "0.25rem" }}>
+                  ⚠ {w}
+                </div>
+              ))}
             </div>
 
             {/* clothing items per person */}

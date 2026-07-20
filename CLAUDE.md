@@ -708,6 +708,7 @@ Response `200`:
           "position": "center",
           "overallStyle": ["casual"],
           "styleTags": ["casual", "minimalist"],
+          "faceBoundingBox": { "x": 0.42, "y": 0.05, "width": 0.16, "height": 0.18 },
           "clothingItems": [
             {
               "category": "top",
@@ -723,7 +724,8 @@ Response `200`:
               "details": [], "visibleText": null, "brand": null, "logo": null,
               "condition": "good",
               "styleTags": ["casual"],
-              "confidence": 0.92
+              "confidence": 0.92,
+              "boundingBox": { "x": 0.30, "y": 0.22, "width": 0.40, "height": 0.35 }
             }
           ],
           "overallConfidence": 0.90
@@ -753,11 +755,25 @@ from identity inference. The system prompt enforces:
 - Do NOT infer ethnicity, religion, health status, sexual orientation, or any sensitive attribute.
 ```
 A person is represented only as `personId` (`person_1`, `person_2`, ... — stable
-only *within* one image, not across images) and coarse `position`
-(`left | center | right | upper-left | upper-right | lower-left | lower-right`).
-No face embeddings, no biometric data, no demographic attributes are extracted or
+only *within* one image, not across images), coarse `position`
+(`left | center | right | upper-left | upper-right | lower-left | lower-right`),
+and — see below — a `faceBoundingBox` that localizes but never identifies. No
+face embeddings, no biometric data, no demographic attributes are extracted or
 stored. **Working rule**: if this prompt is ever edited, keep these constraints —
 they're a privacy boundary, not incidental wording.
+
+**Bounding boxes (`faceBoundingBox`, `boundingBox`) — for UI overlays.** Both are
+normalized (0.0–1.0, top-left origin) `{ x, y, width, height }`, resolution-
+independent so the caller scales to whatever size the image is actually
+rendered at. `faceBoundingBox` on `PersonTraits` marks *where a face is*, not
+who it belongs to — this is face **localization**, which the privacy boundary
+above permits; face **recognition/identification** is what's barred. `boundingBox`
+on `ClothingItemTraits` marks the garment's extent. Both are nullable — omitted
+when the model can't localize confidently — and prompted from the same gpt-5-mini
+call rather than a dedicated grounding/object-detection service, so treat them as
+**approximate**: good enough to draw a highlight box on screen, not for pixel-
+precise crops. Domain type: `BoundingBox(double X, double Y, double Width, double Height)`
+in `Robe.Core.Domain`.
 
 Errors: `400` (bad/missing/oversized/too-many images), `502` (model call failed,
 malformed model output, or content filtered).
@@ -766,6 +782,8 @@ Tests to show passing (`GarmentBatchAnalyzeTests.cs`):
 - valid images → `200` with per-image, per-person, per-garment results
 - results contain people and clothing items with expected fields populated
 - omitted `imageId` → auto-assigned (`img-1`, `img-2`, ...)
+- face/garment bounding boxes present and normalized within `[0,1]`
+- omitted bounding box → `null`, not an error
 - empty/missing images list → `400`
 - too many images (> `MaxImagesPerBatch`) → `400`
 - invalid base64 / oversized image / unsupported mime type → `400`
@@ -773,10 +791,39 @@ Tests to show passing (`GarmentBatchAnalyzeTests.cs`):
 
 New domain types (`Robe.Core.Domain`): `FashionImageInput`,
 `TraitsExtractionResult`, `ImageTraitsResult`, `PersonTraits`,
-`ClothingItemTraits`, `ColorTraits` — see `IFashionTraitsExtractor` above for the
-interface. Not aliases of `GarmentTraits`/`ImageInput`; kept as separate types
-since this extraction is richer (per-person, more garment attributes) than what
-API #2's storage model (`GarmentTraits`) needs.
+`ClothingItemTraits`, `ColorTraits`, `BoundingBox` — see `IFashionTraitsExtractor`
+above for the interface. Not aliases of `GarmentTraits`/`ImageInput`; kept as
+separate types since this extraction is richer (per-person, more garment
+attributes, spatial location) than what API #2's storage model (`GarmentTraits`)
+needs — `GarmentTraits` intentionally has no bounding box field.
+
+### Frontend: visual overlay (faces + garments on the image)  ✅ DONE
+
+`apps/web/components/ImageWithOverlay.tsx` renders an image with an absolutely-
+positioned SVG layer drawing a dashed box per `faceBoundingBox` and a solid,
+labeled box per garment `boundingBox`. Since the container's aspect ratio rarely
+matches the image's natural aspect ratio, it replicates the CSS
+`object-fit: contain` letterboxing math itself (`ResizeObserver` for container
+size, `<img onLoad>` for natural size) so normalized coordinates land on the
+correct pixel rect rather than the naive `container × normalized` calculation,
+which would be wrong whenever the image is letterboxed.
+
+Wired into `BatchReview` (`UploadFlow.tsx`) in place of the old 52×52 thumbnail —
+each image in the batch-review step now shows the full preview with overlays,
+and a clothing item's box is highlighted (`highlighted: true`) when its checkbox
+in the list below is selected. Single-image review (`/analyze`, not `/analyze-batch`)
+is unaffected — scope is batch-only, matching `GarmentTraits` having no bounding
+box field.
+
+Not yet regenerated automatically: `packages/types/src/index.ts` and
+`packages/api/src/*` are **hand-maintained**, not consumed from
+`pnpm gen:api`'s output (`packages/types/src/generated.ts`,
+`packages/api/src/generated-client.ts`) despite "API contract & OpenAPI" above
+describing the frontend as codegening from the spec — that pipeline exists
+(and its broken `orval.config.ts` relative path was fixed while adding this
+feature) but the app doesn't consume its output yet. `BoundingBox` was added
+by hand to `packages/types/src/index.ts` to match. Reconciling the two is
+out of scope here — flagging so it isn't mistaken for already wired up.
 
 ---
 

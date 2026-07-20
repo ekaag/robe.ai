@@ -77,6 +77,80 @@ public class GarmentBatchAnalyzeTests : IClassFixture<WebApplicationFactory<Prog
     }
 
     [Fact]
+    public async Task AnalyzeBatch_ResultsContainFaceAndGarmentBoundingBoxes()
+    {
+        var client = BuildClient(FakeFashionTraitsExtractor.ReturnsDefault());
+        var body = new
+        {
+            images = new[] { new { imageId = "img-1", imageBase64 = SmallBase64(), mimeType = "image/jpeg" } }
+        };
+
+        var response = await client.PostAsJsonAsync("/api/garments/analyze-batch", body);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>();
+        var person = json.GetProperty("images")[0].GetProperty("people")[0];
+
+        var face = person.GetProperty("faceBoundingBox");
+        AssertNormalizedBox(face);
+
+        var item = person.GetProperty("clothingItems")[0];
+        var box = item.GetProperty("boundingBox");
+        AssertNormalizedBox(box);
+    }
+
+    [Fact]
+    public async Task AnalyzeBatch_OmittedBoundingBoxes_ReturnNullNotError()
+    {
+        var expected = new TraitsExtractionResult(new List<ImageTraitsResult>
+        {
+            new ImageTraitsResult("img-1", new List<PersonTraits>
+            {
+                new PersonTraits(
+                    PersonId: "person-1",
+                    Position: "center",
+                    OverallStyle: new List<string>(),
+                    StyleTags: new List<string>(),
+                    ClothingItems: new List<ClothingItemTraits>
+                    {
+                        new ClothingItemTraits(
+                            Category: "top", Type: "t-shirt", Subtype: null,
+                            PrimaryColor: null, SecondaryColors: new List<ColorTraits>(),
+                            Pattern: null, Material: null, Fit: null, Length: null,
+                            SleeveLength: null, Neckline: null, CollarType: null,
+                            WaistRise: null, ClosureType: null, Details: new List<string>(),
+                            VisibleText: null, Brand: null, Logo: null, Condition: null,
+                            StyleTags: new List<string>(), Confidence: 0.5,
+                            BoundingBox: null)
+                    },
+                    OverallConfidence: 0.5,
+                    FaceBoundingBox: null)
+            }, new List<string>())
+        });
+        var client = BuildClient(FakeFashionTraitsExtractor.Returns(_ => expected));
+        var body = new
+        {
+            images = new[] { new { imageId = "img-1", imageBase64 = SmallBase64(), mimeType = "image/jpeg" } }
+        };
+
+        var response = await client.PostAsJsonAsync("/api/garments/analyze-batch", body);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>();
+        var person = json.GetProperty("images")[0].GetProperty("people")[0];
+        Assert.Equal(JsonValueKind.Null, person.GetProperty("faceBoundingBox").ValueKind);
+        Assert.Equal(JsonValueKind.Null, person.GetProperty("clothingItems")[0].GetProperty("boundingBox").ValueKind);
+    }
+
+    private static void AssertNormalizedBox(JsonElement box)
+    {
+        Assert.InRange(box.GetProperty("x").GetDouble(), 0.0, 1.0);
+        Assert.InRange(box.GetProperty("y").GetDouble(), 0.0, 1.0);
+        Assert.InRange(box.GetProperty("width").GetDouble(), 0.0, 1.0);
+        Assert.InRange(box.GetProperty("height").GetDouble(), 0.0, 1.0);
+    }
+
+    [Fact]
     public async Task AnalyzeBatch_AutoAssignsImageIdWhenNotProvided()
     {
         var client = BuildClient(FakeFashionTraitsExtractor.ReturnsDefault());

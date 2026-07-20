@@ -76,6 +76,66 @@
         }
       }
     },
+    "/api/garments/analyze-batch": {
+      "post": {
+        "tags": [
+          "Garments"
+        ],
+        "summary": "Analyze multiple garment images and extract per-person clothing traits from each.",
+        "description": "Stateless. Sends all images to the vision model in one call and returns structured\r\ntraits per person per image. Captures multi-person outfits that /analyze cannot.\r\nNo authentication required. No data is persisted.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchAnalyzeRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchAnalyzeRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchAnalyzeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchAnalyzeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/garments": {
       "post": {
         "tags": [
@@ -501,6 +561,177 @@
         },
         "additionalProperties": false
       },
+      "BatchAnalyzeImageRequest": {
+        "type": "object",
+        "properties": {
+          "imageId": {
+            "type": "string",
+            "nullable": true
+          },
+          "imageBase64": {
+            "type": "string",
+            "nullable": true
+          },
+          "mimeType": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "BatchAnalyzeRequest": {
+        "type": "object",
+        "properties": {
+          "images": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BatchAnalyzeImageRequest"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "BatchAnalyzeResponse": {
+        "type": "object",
+        "properties": {
+          "images": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageTraitsResult"
+            },
+            "nullable": true
+          },
+          "modelVersion": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "BoundingBox": {
+        "type": "object",
+        "properties": {
+          "x": {
+            "type": "number",
+            "format": "double"
+          },
+          "y": {
+            "type": "number",
+            "format": "double"
+          },
+          "width": {
+            "type": "number",
+            "format": "double"
+          },
+          "height": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ClothingItemTraits": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "nullable": true
+          },
+          "type": {
+            "type": "string",
+            "nullable": true
+          },
+          "subtype": {
+            "type": "string",
+            "nullable": true
+          },
+          "primaryColor": {
+            "$ref": "#/components/schemas/ColorTraits"
+          },
+          "secondaryColors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ColorTraits"
+            },
+            "nullable": true
+          },
+          "pattern": {
+            "type": "string",
+            "nullable": true
+          },
+          "material": {
+            "type": "string",
+            "nullable": true
+          },
+          "fit": {
+            "type": "string",
+            "nullable": true
+          },
+          "length": {
+            "type": "string",
+            "nullable": true
+          },
+          "sleeveLength": {
+            "type": "string",
+            "nullable": true
+          },
+          "neckline": {
+            "type": "string",
+            "nullable": true
+          },
+          "collarType": {
+            "type": "string",
+            "nullable": true
+          },
+          "waistRise": {
+            "type": "string",
+            "nullable": true
+          },
+          "closureType": {
+            "type": "string",
+            "nullable": true
+          },
+          "details": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "visibleText": {
+            "type": "string",
+            "nullable": true
+          },
+          "brand": {
+            "type": "string",
+            "nullable": true
+          },
+          "logo": {
+            "type": "string",
+            "nullable": true
+          },
+          "condition": {
+            "type": "string",
+            "nullable": true
+          },
+          "styleTags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "confidence": {
+            "type": "number",
+            "format": "double"
+          },
+          "boundingBox": {
+            "$ref": "#/components/schemas/BoundingBox"
+          }
+        },
+        "additionalProperties": false
+      },
       "ColorInfo": {
         "type": "object",
         "properties": {
@@ -509,6 +740,20 @@
             "nullable": true
           },
           "hex": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ColorTraits": {
+        "type": "object",
+        "properties": {
+          "normalized": {
+            "type": "string",
+            "nullable": true
+          },
+          "shade": {
             "type": "string",
             "nullable": true
           }
@@ -735,6 +980,30 @@
         },
         "additionalProperties": false
       },
+      "ImageTraitsResult": {
+        "type": "object",
+        "properties": {
+          "imageId": {
+            "type": "string",
+            "nullable": true
+          },
+          "people": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PersonTraits"
+            },
+            "nullable": true
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "InventoryItem": {
         "type": "object",
         "properties": {
@@ -809,6 +1078,48 @@
           "provider": {
             "type": "string",
             "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PersonTraits": {
+        "type": "object",
+        "properties": {
+          "personId": {
+            "type": "string",
+            "nullable": true
+          },
+          "position": {
+            "type": "string",
+            "nullable": true
+          },
+          "overallStyle": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "styleTags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "clothingItems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ClothingItemTraits"
+            },
+            "nullable": true
+          },
+          "overallConfidence": {
+            "type": "number",
+            "format": "double"
+          },
+          "faceBoundingBox": {
+            "$ref": "#/components/schemas/BoundingBox"
           }
         },
         "additionalProperties": false
@@ -987,12 +1298,21 @@
         "description": "Enter your Entra ID JWT token.",
         "scheme": "bearer",
         "bearerFormat": "JWT"
+      },
+      "X-User-Id": {
+        "type": "apiKey",
+        "description": "Local dev only: set a dev user id (e.g. \"dev-user\") to authenticate without a real JWT.",
+        "name": "X-User-Id",
+        "in": "header"
       }
     }
   },
   "security": [
     {
       "Bearer": [ ]
+    },
+    {
+      "X-User-Id": [ ]
     }
   ]
 }

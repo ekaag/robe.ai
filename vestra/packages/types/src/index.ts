@@ -146,6 +146,15 @@ export interface ColorTraitResult {
   shade?: string | null;
 }
 
+// Normalized (0-1, top-left origin) box, resolution-independent — scale by the
+// rendered image's displayed width/height to draw it.
+export interface BoundingBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface ClothingItemTraitsResult {
   category: string;
   type: string;
@@ -168,6 +177,7 @@ export interface ClothingItemTraitsResult {
   condition?: string | null;
   styleTags: string[];
   confidence: number;
+  boundingBox?: BoundingBox | null;
 }
 
 export interface PersonTraitsResult {
@@ -177,6 +187,7 @@ export interface PersonTraitsResult {
   styleTags: string[];
   clothingItems: ClothingItemTraitsResult[];
   overallConfidence: number;
+  faceBoundingBox?: BoundingBox | null;
 }
 
 export interface ImageTraitsResult {
