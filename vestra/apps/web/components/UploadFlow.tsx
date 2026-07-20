@@ -27,10 +27,6 @@ interface BatchImageData {
   previewSrc: string;
 }
 
-const MAX_ANALYSIS_IMAGE_EDGE_PX = 1280;
-const MAX_ANALYSIS_IMAGE_BYTES_WITHOUT_RESIZE = 1.5 * 1024 * 1024;
-const ANALYSIS_JPEG_QUALITY = 0.82;
-
 interface UploadFlowProps {
   open: boolean;
   onClose: () => void;
@@ -69,48 +65,6 @@ function readFileAsDataURL(file: File): Promise<string> {
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
-}
-
-function loadImage(src: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = reject;
-    image.src = src;
-  });
-}
-
-async function prepareImageForAnalysis(file: File): Promise<{ dataUrl: string; mimeType: string }> {
-  const originalDataUrl = await readFileAsDataURL(file);
-  if (file.size <= MAX_ANALYSIS_IMAGE_BYTES_WITHOUT_RESIZE) {
-    return { dataUrl: originalDataUrl, mimeType: file.type };
-  }
-
-  const image = await loadImage(originalDataUrl);
-  const width = image.naturalWidth || image.width;
-  const height = image.naturalHeight || image.height;
-  if (width <= 0 || height <= 0) {
-    return { dataUrl: originalDataUrl, mimeType: file.type };
-  }
-
-  const scale = Math.min(1, MAX_ANALYSIS_IMAGE_EDGE_PX / Math.max(width, height));
-  const targetWidth = Math.max(1, Math.round(width * scale));
-  const targetHeight = Math.max(1, Math.round(height * scale));
-
-  const canvas = document.createElement("canvas");
-  canvas.width = targetWidth;
-  canvas.height = targetHeight;
-
-  const ctx = canvas.getContext("2d");
-  if (!ctx) {
-    return { dataUrl: originalDataUrl, mimeType: file.type };
-  }
-
-  ctx.drawImage(image, 0, 0, targetWidth, targetHeight);
-  return {
-    dataUrl: canvas.toDataURL("image/jpeg", ANALYSIS_JPEG_QUALITY),
-    mimeType: "image/jpeg",
-  };
 }
 
 export function UploadFlow({ open, onClose }: UploadFlowProps) {
@@ -153,11 +107,11 @@ export function UploadFlow({ open, onClose }: UploadFlowProps) {
     try {
       const readFiles = await Promise.all(
         files.map(async (file, i) => {
-          const { dataUrl, mimeType } = await prepareImageForAnalysis(file);
+          const dataUrl = await readFileAsDataURL(file);
           return {
             imageId: `img-${i + 1}`,
             imageBase64: dataUrl.split(",")[1],
-            mimeType,
+            mimeType: file.type,
             previewSrc: dataUrl,
           } satisfies BatchImageData;
         })

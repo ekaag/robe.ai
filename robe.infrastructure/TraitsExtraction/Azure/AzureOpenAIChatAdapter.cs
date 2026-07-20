@@ -61,7 +61,7 @@ internal sealed class AzureOpenAIChatAdapter : IAzureOpenAIChatAdapter
         {
             userParts.Add(ChatMessageContentPart.CreateTextPart($"[Image: {img.ImageId}]"));
             userParts.Add(ChatMessageContentPart.CreateImagePart(
-                BinaryData.FromBytes(img.Content), img.ContentType, ParseImageDetailLevel(request.ImageDetailLevel)));
+                BinaryData.FromBytes(img.Content), img.ContentType, ChatImageDetailLevel.High));
         }
 
         var messages = new List<ChatMessage>
@@ -82,13 +82,4 @@ internal sealed class AzureOpenAIChatAdapter : IAzureOpenAIChatAdapter
         string? content = completion.Content.Count > 0 ? completion.Content[0].Text : null;
         return new ChatAdapterResponse(content, isFiltered);
     }
-
-    private static ChatImageDetailLevel ParseImageDetailLevel(string? value) =>
-        value?.Trim().ToLowerInvariant() switch
-        {
-            "low" => ChatImageDetailLevel.Low,
-            "auto" => ChatImageDetailLevel.Auto,
-            "high" => ChatImageDetailLevel.High,
-            _ => ChatImageDetailLevel.Low,
-        };
 }
