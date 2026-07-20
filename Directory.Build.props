@@ -4,10 +4,5 @@
     <OutDir>..\..\..\project-outputs\robe.ai\$(MSBuildProjectName)\$(Configuration)\</OutDir>
     <!-- Optional: control publish output folder as well. -->
     <PublishDir>..\..\..\project-outputs\robe.ai\$(MSBuildProjectName)\publish\</PublishDir>
-    <!-- Microsoft.Azure.Cosmos's buildTransitive check demands an explicit Newtonsoft.Json
-         reference in every project that ends up referencing it (not just robe.infrastructure).
-         We supply our own System.Text.Json-based CosmosSerializer (CosmosJsonSerializer) and
-         never touch the SDK's default Newtonsoft.Json path, so there's nothing to pin here. -->
-    <AzureCosmosDisableNewtonsoftJsonCheck>true</AzureCosmosDisableNewtonsoftJsonCheck>
   </PropertyGroup>
 </Project>
