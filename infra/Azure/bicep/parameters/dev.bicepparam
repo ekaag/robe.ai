@@ -8,6 +8,7 @@ param appServicePlanSkuName = 'F1'
 param appServicePlanSkuTier = 'Free'
 param enablePurgeProtection = false
 param openAiLocation = 'eastus'
+param storageSkuName = 'Standard_LRS'
 
 // SWA Standard is required for Next.js SSR (App Router, dynamic routes).
 // SWA is not available in canadacentral — use eastus2.

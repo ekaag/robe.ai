@@ -70,6 +70,7 @@ module devStage 'modules/stage.bicep' = {
     entraAuthority: entraAuthority
     entraClientId: entraClientId
     entraApiScope: entraApiScope
+    storageSkuName: 'Standard_LRS'
   }
 }
 
@@ -89,6 +90,7 @@ module gammaStage 'modules/stage.bicep' = {
     entraAuthority: entraAuthority
     entraClientId: entraClientId
     entraApiScope: entraApiScope
+    storageSkuName: 'Standard_ZRS'
   }
 }
 
@@ -108,6 +110,7 @@ module liveStage 'modules/stage.bicep' = {
     entraAuthority: entraAuthority
     entraClientId: entraClientId
     entraApiScope: entraApiScope
+    storageSkuName: 'Standard_GRS'
   }
 }
 
@@ -117,6 +120,11 @@ output devOpenAiEndpoint string = devStage.outputs.openAiEndpoint
 output devOpenAiDeploymentName string = devStage.outputs.openAiDeploymentName
 output devStaticWebAppName string = devStage.outputs.staticWebAppName
 output devStaticWebAppHostName string = devStage.outputs.staticWebAppHostName
+output devCosmosEndpoint string = devStage.outputs.cosmosEndpoint
+output devCosmosDatabaseName string = devStage.outputs.cosmosDatabaseName
+output devCosmosContainerName string = devStage.outputs.cosmosContainerName
+output devStorageBlobServiceUri string = devStage.outputs.storageBlobServiceUri
+output devStorageContainerName string = devStage.outputs.storageContainerName
 
 output gammaKeyVaultUri string = gammaStage.outputs.keyVaultUri
 output gammaAppServiceHostName string = gammaStage.outputs.appServiceDefaultHostName
@@ -124,6 +132,11 @@ output gammaOpenAiEndpoint string = gammaStage.outputs.openAiEndpoint
 output gammaOpenAiDeploymentName string = gammaStage.outputs.openAiDeploymentName
 output gammaStaticWebAppName string = gammaStage.outputs.staticWebAppName
 output gammaStaticWebAppHostName string = gammaStage.outputs.staticWebAppHostName
+output gammaCosmosEndpoint string = gammaStage.outputs.cosmosEndpoint
+output gammaCosmosDatabaseName string = gammaStage.outputs.cosmosDatabaseName
+output gammaCosmosContainerName string = gammaStage.outputs.cosmosContainerName
+output gammaStorageBlobServiceUri string = gammaStage.outputs.storageBlobServiceUri
+output gammaStorageContainerName string = gammaStage.outputs.storageContainerName
 
 output liveKeyVaultUri string = liveStage.outputs.keyVaultUri
 output liveAppServiceHostName string = liveStage.outputs.appServiceDefaultHostName
@@ -131,3 +144,8 @@ output liveOpenAiEndpoint string = liveStage.outputs.openAiEndpoint
 output liveOpenAiDeploymentName string = liveStage.outputs.openAiDeploymentName
 output liveStaticWebAppName string = liveStage.outputs.staticWebAppName
 output liveStaticWebAppHostName string = liveStage.outputs.staticWebAppHostName
+output liveCosmosEndpoint string = liveStage.outputs.cosmosEndpoint
+output liveCosmosDatabaseName string = liveStage.outputs.cosmosDatabaseName
+output liveCosmosContainerName string = liveStage.outputs.cosmosContainerName
+output liveStorageBlobServiceUri string = liveStage.outputs.storageBlobServiceUri
+output liveStorageContainerName string = liveStage.outputs.storageContainerName

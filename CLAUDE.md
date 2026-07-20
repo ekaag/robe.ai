@@ -67,7 +67,7 @@ for status.
   from it.
 - **Multi-cloud folder convention**: a cloud-specific implementation lives in a
   per-feature `Azure/` subfolder with an `Azure`-prefixed class name (e.g.
-  `Persistence/Azure/AzureSqlGarmentRepository.cs`). Provider-agnostic
+  `Persistence/Azure/AzureCosmosGarmentRepository.cs`). Provider-agnostic
   implementations (`Fake*`, `InMemory*`, `MockSecretManager`) stay directly
   under the feature folder, not in `Azure/`. A future AWS/GCP implementation
   gets its own sibling subfolder + provider prefix — never rename or move the
@@ -112,7 +112,9 @@ public interface IGarmentRepository
     Task<IReadOnlyList<Garment>> ListAsync(string userId, GarmentQuery query, CancellationToken ct = default);
     Task<bool> DeleteAsync(string id, string userId, CancellationToken ct = default);
 }
-// impls: AzureSqlGarmentRepository | CosmosGarmentRepository | InMemoryGarmentRepository
+// impls: AzureCosmosGarmentRepository | InMemoryGarmentRepository
+// (Cosmos DB chosen over Azure SQL — container "garments" partitioned on /userId,
+// serverless capacity mode in every stage; see stage.bicep)
 
 public interface IImageStore
 {
@@ -120,6 +122,8 @@ public interface IImageStore
     Task DeleteAsync(string key, CancellationToken ct = default);
 }
 // impls: AzureBlobImageStore | S3ImageStore | InMemoryImageStore
+// (garment-images container has blob-level public read — ImageUrl is a stable URL persisted
+// forever in Garment, so it can't depend on an expiring SAS; see stage.bicep)
 
 public interface ICurrentUser
 {

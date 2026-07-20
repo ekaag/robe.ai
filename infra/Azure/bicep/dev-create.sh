@@ -3,10 +3,13 @@
 # Deploys the dev stage end-to-end:
 #   1. Creates resource group
 #   2. Deploys infra via Bicep: Key Vault, App Service (with managed identity),
-#      Azure OpenAI account + gpt-5-mini deployment, RBAC grants, App Insights
+#      Azure OpenAI account + gpt-5-mini deployment, Cosmos DB (serverless,
+#      garments container), Storage account (garment-images blob container),
+#      RBAC grants, App Insights
 #   3. Grants the CLI caller Key Vault Secrets Officer (to write secrets)
-#   4. Reads the OpenAI endpoint from Bicep outputs and writes both OpenAI
-#      secrets into Key Vault (no API key — managed identity authenticates)
+#   4. Reads the OpenAI/Cosmos/Storage outputs from Bicep and writes all of
+#      them into Key Vault (no API keys/connection strings — managed identity
+#      authenticates to each service via its own RBAC grant)
 #   5. Publishes and deploys robe.api via zip deploy
 #   6. Waits for the app to come up
 #   7. Smoke tests the full wiring: Key Vault → managed identity → Azure OpenAI
@@ -193,7 +196,7 @@ fi
 echo "==> [1/7] Creating resource group $RESOURCE_GROUP in $LOCATION..."
 az group create --name "$RESOURCE_GROUP" --location "$LOCATION" --output none
 
-echo "==> [2/7] Deploying dev stage infra (Key Vault, App Service, Azure OpenAI, App Insights)..."
+echo "==> [2/7] Deploying dev stage infra (Key Vault, App Service, Azure OpenAI, Cosmos DB, Storage, App Insights)..."
 # Named deployment so we can read its outputs in the next step.
 az deployment group create \
   --resource-group "$RESOURCE_GROUP" \
@@ -215,6 +218,37 @@ AOAI_DEPLOYMENT="$(az deployment group show \
   -o tsv)"
 [ -n "$AOAI_ENDPOINT" ] || fail "OpenAI endpoint not found in deployment outputs."
 echo "    OpenAI endpoint: $AOAI_ENDPOINT  deployment: $AOAI_DEPLOYMENT"
+
+echo "    Reading Cosmos DB / Storage outputs from deployment outputs..."
+COSMOS_ENDPOINT="$(az deployment group show \
+  --resource-group "$RESOURCE_GROUP" \
+  --name "$DEPLOY_NAME" \
+  --query "properties.outputs.cosmosEndpoint.value" \
+  -o tsv)"
+COSMOS_DATABASE_NAME="$(az deployment group show \
+  --resource-group "$RESOURCE_GROUP" \
+  --name "$DEPLOY_NAME" \
+  --query "properties.outputs.cosmosDatabaseName.value" \
+  -o tsv)"
+COSMOS_CONTAINER_NAME="$(az deployment group show \
+  --resource-group "$RESOURCE_GROUP" \
+  --name "$DEPLOY_NAME" \
+  --query "properties.outputs.cosmosContainerName.value" \
+  -o tsv)"
+STORAGE_BLOB_SERVICE_URI="$(az deployment group show \
+  --resource-group "$RESOURCE_GROUP" \
+  --name "$DEPLOY_NAME" \
+  --query "properties.outputs.storageBlobServiceUri.value" \
+  -o tsv)"
+STORAGE_CONTAINER_NAME="$(az deployment group show \
+  --resource-group "$RESOURCE_GROUP" \
+  --name "$DEPLOY_NAME" \
+  --query "properties.outputs.storageContainerName.value" \
+  -o tsv)"
+[ -n "$COSMOS_ENDPOINT" ] || fail "Cosmos DB endpoint not found in deployment outputs."
+[ -n "$STORAGE_BLOB_SERVICE_URI" ] || fail "Storage blob service URI not found in deployment outputs."
+echo "    Cosmos endpoint: $COSMOS_ENDPOINT  database: $COSMOS_DATABASE_NAME  container: $COSMOS_CONTAINER_NAME"
+echo "    Storage blob endpoint: $STORAGE_BLOB_SERVICE_URI  container: $STORAGE_CONTAINER_NAME"
 
 echo "==> [3/7] Ensuring caller can write Key Vault secrets..."
 # kv-robeai-dev uses RBAC authorization (enableRbacAuthorization: true), and
@@ -243,12 +277,19 @@ else
   echo "    Already granted."
 fi
 
-echo "==> [4/7] Writing OpenAI secrets to Key Vault..."
-# The endpoint comes from Bicep outputs (read in step 2); no API key is stored
-# because the App Service managed identity authenticates via the
-# "Cognitive Services OpenAI User" RBAC grant that stage.bicep already created.
+echo "==> [4/7] Writing OpenAI / Cosmos DB / Storage secrets to Key Vault..."
+# All values come from Bicep outputs (read in step 2); no API keys or connection
+# strings are stored because the App Service managed identity authenticates to
+# each service via the RBAC grants stage.bicep already created (Cognitive
+# Services OpenAI User, Cosmos DB Built-in Data Contributor, Storage Blob Data
+# Contributor).
 az keyvault secret set --vault-name "$KEY_VAULT" --name "AzureOpenAI--Endpoint" --value "$AOAI_ENDPOINT" --output none
 az keyvault secret set --vault-name "$KEY_VAULT" --name "AzureOpenAI--DeploymentName" --value "$AOAI_DEPLOYMENT" --output none
+az keyvault secret set --vault-name "$KEY_VAULT" --name "CosmosDb--Endpoint" --value "$COSMOS_ENDPOINT" --output none
+az keyvault secret set --vault-name "$KEY_VAULT" --name "CosmosDb--DatabaseName" --value "$COSMOS_DATABASE_NAME" --output none
+az keyvault secret set --vault-name "$KEY_VAULT" --name "CosmosDb--ContainerName" --value "$COSMOS_CONTAINER_NAME" --output none
+az keyvault secret set --vault-name "$KEY_VAULT" --name "Storage--BlobServiceUri" --value "$STORAGE_BLOB_SERVICE_URI" --output none
+az keyvault secret set --vault-name "$KEY_VAULT" --name "Storage--ContainerName" --value "$STORAGE_CONTAINER_NAME" --output none
 
 echo "==> [5/7] Publishing and deploying robe.api..."
 PUBLISH_DIR="$(mktemp -d)"

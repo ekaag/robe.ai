@@ -226,7 +226,11 @@ if (useLocalFakes)
         sp.GetRequiredService<ILogService>(),
         sp.GetRequiredService<IMetricsService>(),
         sp.GetRequiredService<IAlertService>()));
-    builder.Services.AddSingleton<IImageStore, InMemoryImageStore>();
+    builder.Services.AddSingleton<IImageStore>(sp => new ObservableImageStore(
+        new InMemoryImageStore(),
+        sp.GetRequiredService<ILogService>(),
+        sp.GetRequiredService<IMetricsService>(),
+        sp.GetRequiredService<IAlertService>()));
     builder.Services.AddScoped<IProfileGenerator>(sp => new ObservableProfileGenerator(
         new FakeProfileGenerator(),
         sp.GetRequiredService<ILogService>(),
@@ -266,12 +270,24 @@ else
         sp.GetRequiredService<ILogService>(),
         sp.GetRequiredService<IMetricsService>(),
         sp.GetRequiredService<IAlertService>()));
+    // Registered as singletons (like AzureOpenAITraitsExtractor above) so the underlying
+    // CosmosClient/BlobServiceClient — and the managed-identity token they authenticate
+    // with — are built once and reused, not reconnected on every request.
+    builder.Services.AddSingleton<AzureCosmosGarmentRepository>(sp =>
+        new AzureCosmosGarmentRepository(sp.GetRequiredService<ISecretManager>()));
     builder.Services.AddScoped<IGarmentRepository>(sp => new ObservableGarmentRepository(
-        new AzureSqlGarmentRepository(),
+        sp.GetRequiredService<AzureCosmosGarmentRepository>(),
         sp.GetRequiredService<ILogService>(),
         sp.GetRequiredService<IMetricsService>(),
         sp.GetRequiredService<IAlertService>()));
-    builder.Services.AddScoped<IImageStore, AzureBlobImageStore>();
+
+    builder.Services.AddSingleton<AzureBlobImageStore>(sp =>
+        new AzureBlobImageStore(sp.GetRequiredService<ISecretManager>()));
+    builder.Services.AddScoped<IImageStore>(sp => new ObservableImageStore(
+        sp.GetRequiredService<AzureBlobImageStore>(),
+        sp.GetRequiredService<ILogService>(),
+        sp.GetRequiredService<IMetricsService>(),
+        sp.GetRequiredService<IAlertService>()));
     builder.Services.AddScoped<IProfileGenerator>(sp => new ObservableProfileGenerator(
         new AzureOpenAIProfileGenerator(),
         sp.GetRequiredService<ILogService>(),
