@@ -108,6 +108,30 @@ describe("WebMsalAuthProvider", () => {
       expect(provider.currentUser?.id).toBe("usr_123");
       expect(provider.currentUser?.provider).toBe("google");
     });
+
+    it("treats Entra's 'Unknown' placeholder display name as absent, falling back to email", async () => {
+      const sparseAccount = {
+        ...mockAccount,
+        name: "Unknown",
+        username: "test@example.com",
+        idTokenClaims: { idp: "google", name: "Unknown" },
+      };
+      mockPca.loginPopup.mockResolvedValueOnce({ accessToken: "token", account: sparseAccount });
+      await provider.signIn("google");
+      expect(provider.currentUser?.name).toBe("test@example.com");
+    });
+
+    it("falls back to undefined name when 'Unknown' placeholder and no email are present", async () => {
+      const sparseAccount = {
+        ...mockAccount,
+        name: "Unknown",
+        username: "local_123",
+        idTokenClaims: { idp: "google", name: "Unknown" },
+      };
+      mockPca.loginPopup.mockResolvedValueOnce({ accessToken: "token", account: sparseAccount });
+      await provider.signIn("google");
+      expect(provider.currentUser?.name).toBeUndefined();
+    });
   });
 
   describe("signOut()", () => {

@@ -15,6 +15,20 @@ const DOMAIN_HINTS: Partial<Record<AuthProvider, string>> = {
   apple: "apple.com",
 };
 
+// Entra CIAM's default "Display Name" application claim resolves to this literal
+// placeholder when the user flow returns the claim without ever collecting a real
+// value from the federated IdP (seen with Google sign-in when the claim isn't
+// properly mapped in the user flow — see FRONTEND.md "CIAM + Google federation
+// gives a sparse ID token"). Treat it like an empty claim rather than displaying
+// it, so a misconfigured tenant degrades to the provider-name fallback instead.
+const ENTRA_PLACEHOLDER_NAMES = new Set(["unknown"]);
+
+function realClaim(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed || ENTRA_PLACEHOLDER_NAMES.has(trimmed.toLowerCase())) return undefined;
+  return trimmed;
+}
+
 function accountToUser(account: AccountInfo, provider: AuthProvider): CurrentUser {
   const c = account.idTokenClaims as Record<string, unknown> | undefined;
 
@@ -23,17 +37,17 @@ function accountToUser(account: AccountInfo, provider: AuthProvider): CurrentUse
 
   // CIAM user flows don't always populate account.name; try several claim sources.
   // preferred_username / email are most reliable for Google-federated CIAM accounts.
-  const given  = c?.["given_name"] as string | undefined;
-  const family = c?.["family_name"] as string | undefined;
+  const given  = realClaim(c?.["given_name"] as string | undefined);
+  const family = realClaim(c?.["family_name"] as string | undefined);
   const full   = given && family ? `${given} ${family}` : given ?? family;
   const email  =
     (c?.["email"] as string | undefined) ||
     (c?.["preferred_username"] as string | undefined) ||
     (account.username?.includes("@") ? account.username : undefined);
   const name   =
-    full?.trim() ||
-    (c?.["name"] as string | undefined)?.trim() ||
-    account.name?.trim() ||
+    full ||
+    realClaim(c?.["name"] as string | undefined) ||
+    realClaim(account.name) ||
     email ||
     undefined;
 
