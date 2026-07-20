@@ -348,23 +348,28 @@ cd vestra && pnpm dev
 
 ### Azure SWA — build config requirements
 
-Two files in `vestra/apps/web/` are required for SSR deployment to Azure Static
-Web Apps:
+The app deploys as a **static export** — no Node SSR runtime on SWA. This was
+a deliberate switch away from `output: "standalone"` (the original plan) to
+sidestep SWA's Node 18-vs-20 runtime mismatches and cold-start warmup timeouts;
+none of the app's routes need server rendering (auth, data fetching, and
+routing are all client-side via TanStack Query + MSAL).
 
-- **`next.config.mjs`** — must include `output: "standalone"` so Next.js
-  emits a self-contained Node server in `.next/standalone/`.
-- **`staticwebapp.config.json`** — `{ "platform": { "apiRuntime": "node:18" } }`
-  tells SWA to serve the standalone server as the SSR runtime.
-- **Standard SKU** is required — the Free SKU only supports static export, not
-  Next.js App Router with dynamic routes and SSR.
+- **`next.config.mjs`** — `output: "export"` (produces static HTML/CSS/JS in
+  `out/`) with `images: { unoptimized: true }` (required alongside
+  `output: "export"` — the Image Optimization API needs a server, which static
+  export doesn't have; components use plain `<img>` anyway, so this has no
+  practical effect).
+- **`public/staticwebapp.config.json`** — `navigationFallback.rewrite` to
+  `/index.html` (excluding `/_next/*` and `/favicon.ico`) so client-side routes
+  (`/wardrobe/[id]`, etc.) resolve correctly on refresh/deep-link instead of
+  404ing. Lives under `public/` so `next build` copies it into `out/`
+  automatically — no separate copy step needed.
+- Infra still provisions **Standard SKU** (see `stage.bicep`) — that requirement
+  was for the SSR path this app no longer uses; whether Free would suffice for
+  pure static hosting hasn't been evaluated, so no change proposed here.
 
-After `next build`, the standalone output does **not** include static assets:
-copy them manually before deploying:
-```bash
-cp -r .next/static    .next/standalone/.next/static
-cp -r public/         .next/standalone/public
-cp staticwebapp.config.json .next/standalone/
-```
+No manual asset-copying step is needed — `next build` with `output: "export"`
+puts everything `out/` needs in one place.
 
 ### `NEXT_PUBLIC_*` vars are baked at build time
 
@@ -400,8 +405,9 @@ export FRONTEND_ENTRA_API_SCOPE="api://d4cd6bf9-9a9e-44e6-b7e5-12660e5e32d9/acce
 
 The script: reads the SWA hostname via `az staticwebapp show`, runs
 `pnpm install --frozen-lockfile` + `pnpm --filter @vestra/web run build` with
-the correct env vars, copies static assets into standalone, retrieves the SWA
-deployment token, and runs `@azure/static-web-apps-cli deploy --skip-app-build`.
+the correct env vars, retrieves the SWA deployment token, and runs
+`@azure/static-web-apps-cli deploy --app-location out/` — pointing straight at
+the static export output, no asset-copying step needed.
 
 API endpoints baked in per stage:
 | Stage | API | SWA URL |
