@@ -117,6 +117,14 @@ cd infra/Azure/bicep
 export FRONTEND_ENTRA_AUTHORITY="https://vestraoauth.ciamlogin.com/vestraoauth.onmicrosoft.com"
 export FRONTEND_ENTRA_CLIENT_ID="d4cd6bf9-9a9e-44e6-b7e5-12660e5e32d9"
 export FRONTEND_ENTRA_API_SCOPE="api://d4cd6bf9-9a9e-44e6-b7e5-12660e5e32d9/access_as_user"
+
+# Optional — also auto-registers/deregisters the redirect URI on the Entra app
+# registration (see FRONTEND.md "Automating the redirect URI"). Without this,
+# deploy-frontend.sh/dev-teardown.sh just skip that step silently.
+# NEVER put the actual tenant/client ID/secret values in this file (or any
+# tracked file) — they live only in the gitignored infra/Azure/bicep/.env.entra-graph.
+source infra/Azure/bicep/.env.entra-graph
+
 ./deploy-frontend.sh --stage=gamma --yes
 
 # API endpoints by stage (frontend baked-in at build time):

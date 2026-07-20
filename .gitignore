@@ -242,3 +242,4 @@ vestra/apps/web/out/wardrobe/_.html
 vestra/apps/web/out/wardrobe/_.txt
 robe.api/obj/Release/net7.0/PublishOutputs.*
 vestra/apps/web/out/*
+infra/Azure/bicep/.env.entra-graph

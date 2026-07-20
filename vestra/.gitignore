@@ -4,3 +4,10 @@ dist/
 .expo/
 .turbo/
 *.tsbuildinfo
+
+# Local env files — never commit these (client IDs/authorities aren't secret for
+# an MSAL SPA, but these files are the "never commit" convention documented in
+# their own header comments, and .env.mobile below can carry real values too).
+.env
+.env.local
+.env.*.local

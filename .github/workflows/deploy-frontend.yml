@@ -15,6 +15,15 @@ name: Deploy Frontend
 #        FRONTEND_ENTRA_AUTHORITY  — e.g. https://vestraoauth.ciamlogin.com/...
 #        FRONTEND_ENTRA_CLIENT_ID  — e.g. d4cd6bf9-...
 #        FRONTEND_ENTRA_API_SCOPE  — e.g. api://d4cd6bf9-.../access_as_user
+#      If FRONTEND_ENTRA_CLIENT_ID is set, also add these as environment SECRETS
+#      (not variables — this is a real credential) so the "Register redirect URI
+#      with Entra" step below can auto-register the SWA hostname on each deploy.
+#      See FRONTEND.md "Automating the redirect URI" for how this credential was
+#      created (same one entra-redirect-uri.sh uses locally, one automation SP
+#      shared across stages — not stage-specific):
+#        ENTRA_GRAPH_TENANT_ID
+#        ENTRA_GRAPH_CLIENT_ID
+#        ENTRA_GRAPH_CLIENT_SECRET
 
 on:
   push:
@@ -82,6 +91,18 @@ jobs:
           echo "hostname=$HOSTNAME"   >> $GITHUB_OUTPUT
           echo "token=$TOKEN"         >> $GITHUB_OUTPUT
           echo "app_url=$APP_URL"     >> $GITHUB_OUTPUT
+
+      - name: Register redirect URI with Entra
+        # No-ops cleanly if ENTRA_GRAPH_*/FRONTEND_ENTRA_CLIENT_ID aren't set (e.g. dev
+        # using FakeAuthProvider) — see FRONTEND.md "Automating the redirect URI".
+        env:
+          FRONTEND_ENTRA_CLIENT_ID: ${{ vars.FRONTEND_ENTRA_CLIENT_ID }}
+          ENTRA_GRAPH_TENANT_ID: ${{ secrets.ENTRA_GRAPH_TENANT_ID }}
+          ENTRA_GRAPH_CLIENT_ID: ${{ secrets.ENTRA_GRAPH_CLIENT_ID }}
+          ENTRA_GRAPH_CLIENT_SECRET: ${{ secrets.ENTRA_GRAPH_CLIENT_SECRET }}
+        run: |
+          source infra/Azure/bicep/entra-redirect-uri.sh
+          entra_add_redirect_uri "https://${{ steps.cfg.outputs.hostname }}/auth/blank"
 
       - name: Build Next.js
         env:

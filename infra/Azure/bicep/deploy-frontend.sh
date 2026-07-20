@@ -102,6 +102,11 @@ SWA_HOSTNAME="$(az staticwebapp show \
   || fail "Could not read hostname from $SWA_NAME. Verify it exists in $RESOURCE_GROUP."
 echo "    SWA hostname: $SWA_HOSTNAME"
 
+# shellcheck source=entra-redirect-uri.sh
+source "$SCRIPT_DIR/entra-redirect-uri.sh"
+echo "    Registering redirect URI with Entra (no-op if ENTRA_GRAPH_* env vars aren't set)..."
+entra_add_redirect_uri "https://${SWA_HOSTNAME}/auth/blank"
+
 cd "$REPO_ROOT/vestra"
 pnpm install --frozen-lockfile
 

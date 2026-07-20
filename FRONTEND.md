@@ -180,6 +180,70 @@ To get the user's actual name/email into the token: in the Entra admin center,
 open the CIAM user flow → **User attributes** and **Application claims** →
 enable **Display Name** and **Email Address**.
 
+### Automating the redirect URI (`infra/Azure/bicep/entra-redirect-uri.sh`)
+
+Azure Static Web Apps assigns a **new random hostname every time the SWA
+resource is deleted and recreated** (e.g. `dev-teardown.sh` → `dev-create.sh`).
+Since MSAL requires the exact redirect URI to be pre-registered on the Entra
+app registration, every stage rebuild used to require manually adding
+`https://<new-random-hostname>/auth/blank` in the Entra admin center before
+sign-in would work again.
+
+`entra-redirect-uri.sh` automates this via Microsoft Graph (client-credentials
+auth), parsed with plain `grep`/`sed` rather than `jq` (not reliably available
+on every dev machine) — `deploy-frontend.sh` registers the URI after every
+build, and `dev-teardown.sh` deregisters it before deleting the resource group.
+Both are **opt-in and no-op cleanly** (print a message, don't fail the script)
+if the three `ENTRA_GRAPH_*` env vars below aren't set — so nothing breaks for
+anyone not using real Entra sign-in.
+
+**✅ One-time setup already done** for this project (`sp-robe-entra-redirect-uri-manager`
+in the `vestraoauth.onmicrosoft.com` CIAM tenant, owner of the target app,
+`Application.ReadWrite.OwnedBy` granted + admin-consented). Documented here so
+it doesn't need repeating if the credential is ever rotated or a second app
+needs the same automation:
+
+```bash
+# This is a *separate* Entra tenant from the one your az session normally
+# manages Azure resources in — sign into it explicitly. --use-device-code
+# works headlessly (prints a URL + code to complete in any browser).
+az login --tenant vestraoauth.onmicrosoft.com --allow-no-subscriptions --use-device-code
+
+# 1. Create a dedicated app registration + service principal for this automation.
+APP_ID=$(az ad app create --display-name "sp-robe-entra-redirect-uri-manager" --query appId -o tsv)
+az ad sp create --id "$APP_ID"
+
+# 2. Grant it the Microsoft Graph APPLICATION permission Application.ReadWrite.OwnedBy
+#    (scoped — only lets it manage apps it owns, not every app in the tenant).
+ROLE_ID=$(az ad sp show --id 00000003-0000-0000-c000-000000000000 \
+  --query "appRoles[?value=='Application.ReadWrite.OwnedBy'].id" -o tsv)
+az ad app permission add --id "$APP_ID" --api 00000003-0000-0000-c000-000000000000 \
+  --api-permissions "${ROLE_ID}=Role"
+az ad app permission admin-consent --id "$APP_ID"
+
+# 3. Add it as an owner of the target app (d4cd6bf9-...) — required for the
+#    OwnedBy-scoped permission to actually apply to it.
+AUTOMATION_SP_OBJECT_ID=$(az ad sp show --id "$APP_ID" --query id -o tsv)
+az ad app owner add --id d4cd6bf9-9a9e-44e6-b7e5-12660e5e32d9 --owner-object-id "$AUTOMATION_SP_OBJECT_ID"
+
+# 4. Create a client secret and write it STRAIGHT to the gitignored env file —
+# never print it to the terminal or paste it into any tracked file/doc/chat.
+# infra/Azure/bicep/.env.entra-graph is listed in the root .gitignore.
+CRED_JSON="$(az ad app credential reset --id "$APP_ID" --years 1 -o json)"
+{
+  echo "export ENTRA_GRAPH_TENANT_ID=\"$(echo "$CRED_JSON" | grep -o '"tenant"[^,}]*' | sed -E 's/.*"([^"]*)"$/\1/')\""
+  echo "export ENTRA_GRAPH_CLIENT_ID=\"$(echo "$CRED_JSON" | grep -o '"appId"[^,}]*' | sed -E 's/.*"([^"]*)"$/\1/')\""
+  echo "export ENTRA_GRAPH_CLIENT_SECRET=\"$(echo "$CRED_JSON" | grep -o '"password"[^,}]*' | sed -E 's/.*"([^"]*)"$/\1/')\""
+} > infra/Azure/bicep/.env.entra-graph
+unset CRED_JSON
+```
+
+Then `source infra/Azure/bicep/.env.entra-graph` before running `dev-create.sh` /
+`dev-teardown.sh` / `deploy-frontend.sh`. **Never** put the actual tenant/client
+ID/secret values inline in `scratch-commands.txt`, this file, or any other
+tracked file — `.env.entra-graph` is the only place they should live, and it's
+gitignored specifically so that's structurally hard to get wrong.
+
 ---
 
 ## Design tokens (from the approved mock)

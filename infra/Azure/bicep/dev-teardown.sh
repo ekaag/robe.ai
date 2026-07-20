@@ -17,15 +17,22 @@
 # The script auto-detects whichever region the account was deployed in,
 # so this works regardless of whether openAiLocation was changed between runs.
 #
+# If real Entra sign-in was configured for this stage (see deploy-frontend.sh),
+# the SWA's redirect URI is also deregistered from the Entra app registration before
+# deletion — see entra-redirect-uri.sh for the required ENTRA_GRAPH_* env vars.
+#
 # Usage:
 #   ./dev-teardown.sh [--yes] [--wait] [--purge-vault] [--purge-openai]
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 RESOURCE_GROUP="rg-robe-dev"
 LOCATION="canadacentral"
 KEY_VAULT="kv-robeai-dev"
 OPENAI_ACCOUNT="aoai-robe-dev"
+SWA_NAME="swa-robe-dev"
 
 ASSUME_YES=false
 WAIT_FOR_DELETE=false
@@ -61,6 +68,19 @@ if [ "$ASSUME_YES" != true ]; then
     y|Y) ;;
     *) echo "Aborted."; exit 0 ;;
   esac
+fi
+
+# Read the SWA hostname (if it exists) and deregister its redirect URI from Entra
+# *before* deleting anything — once the resource group is gone there's no way to
+# recover which hostname this stage was using. No-op if Entra automation isn't
+# configured (see entra-redirect-uri.sh) or the SWA never got this far.
+SWA_HOSTNAME="$(az staticwebapp show --name "$SWA_NAME" --resource-group "$RESOURCE_GROUP" \
+  --query "defaultHostname" -o tsv 2>/dev/null || echo "")"
+if [ -n "$SWA_HOSTNAME" ]; then
+  echo "==> Deregistering redirect URI from Entra (no-op if ENTRA_GRAPH_* env vars aren't set)..."
+  # shellcheck source=entra-redirect-uri.sh
+  source "$SCRIPT_DIR/entra-redirect-uri.sh"
+  entra_remove_redirect_uri "https://${SWA_HOSTNAME}/auth/blank"
 fi
 
 if [ "$WAIT_FOR_DELETE" = true ]; then
