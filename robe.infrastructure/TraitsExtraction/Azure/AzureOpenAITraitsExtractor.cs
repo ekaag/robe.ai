@@ -87,18 +87,22 @@ public sealed class AzureOpenAITraitsExtractor : ITraitsExtractor, IFashionTrait
 
         var imageIds = images.Select(i => i.ImageId).ToList();
 
+        var totalImageBytes = images.Sum(i => (long)i.Content.Length);
+
         using var activity = Tracer.StartActivity("ExtractFashionTraits");
         activity?.SetTag("image.count", images.Count);
+        activity?.SetTag("image.bytes", totalImageBytes);
+        activity?.SetTag("azure_openai.image_detail", opts.ImageDetailLevel);
 
         _logger.LogInformation(
-            "Fashion traits extraction starting — {ImageCount} image(s): [{ImageIds}]",
-            images.Count, string.Join(", ", imageIds));
+            "Fashion traits extraction starting — {ImageCount} image(s), {TotalImageBytes} bytes, detail {ImageDetailLevel}: [{ImageIds}]",
+            images.Count, totalImageBytes, opts.ImageDetailLevel, string.Join(", ", imageIds));
 
         var sw = Stopwatch.StartNew();
 
         try
         {
-            var request = BuildRequest(images);
+            var request = BuildRequest(images, opts.ImageDetailLevel);
             var response = await _chat.CompleteChatAsync(request, cancellationToken);
 
             if (response.IsContentFiltered)
@@ -187,7 +191,9 @@ public sealed class AzureOpenAITraitsExtractor : ITraitsExtractor, IFashionTrait
     // Request construction
     // -------------------------------------------------------------------------
 
-    private static ChatAdapterRequest BuildRequest(IReadOnlyCollection<FashionImageInput> images)
+    private static ChatAdapterRequest BuildRequest(
+        IReadOnlyCollection<FashionImageInput> images,
+        string imageDetailLevel)
     {
         var imageIds = images.Select(i => i.ImageId).ToList();
         var idList = string.Join(", ", imageIds.Select(id => $"\"{id}\""));
@@ -201,7 +207,7 @@ public sealed class AzureOpenAITraitsExtractor : ITraitsExtractor, IFashionTrait
             .Select(i => new ChatImageEntry(i.ImageId, i.Content, i.ContentType))
             .ToList();
 
-        return new ChatAdapterRequest(SystemPrompt, instruction, entries);
+        return new ChatAdapterRequest(SystemPrompt, instruction, entries, imageDetailLevel);
     }
 
     // -------------------------------------------------------------------------

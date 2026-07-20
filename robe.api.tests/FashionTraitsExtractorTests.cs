@@ -14,6 +14,7 @@ internal sealed class FakeAzureOpenAIChatAdapter : IAzureOpenAIChatAdapter
     private readonly string? _content;
     private readonly bool _isFiltered;
     private readonly Exception? _exception;
+    public ChatAdapterRequest? LastRequest { get; private set; }
 
     private FakeAzureOpenAIChatAdapter(string? content, bool isFiltered, Exception? exception)
     {
@@ -29,6 +30,7 @@ internal sealed class FakeAzureOpenAIChatAdapter : IAzureOpenAIChatAdapter
 
     public Task<ChatAdapterResponse> CompleteChatAsync(ChatAdapterRequest request, CancellationToken ct)
     {
+        LastRequest = request;
         ct.ThrowIfCancellationRequested();
         if (_exception is not null) throw _exception;
         return Task.FromResult(new ChatAdapterResponse(_content, _isFiltered));
@@ -55,6 +57,7 @@ file static class TestHelpers
     {
         MaxImages = 5,
         MaxImageSizeBytes = 5L * 1024 * 1024,
+        ImageDetailLevel = "low",
     };
 
     public static byte[] SmallImage() => new byte[1024];
@@ -544,5 +547,33 @@ public class FashionTraitsExtractorTests
 
         Assert.Single(result.Images);
         Assert.Equal("img_1", result.Images[0].ImageId);
+    }
+
+    [Fact]
+    public async Task ExtractTraitsAsync_UsesConfiguredImageDetailLevel()
+    {
+        const string json = """
+            {
+              "images": [
+                {
+                  "imageId": "img_1",
+                  "people": [],
+                  "warnings": []
+                }
+              ]
+            }
+            """;
+        var adapter = FakeAzureOpenAIChatAdapter.Returns(json);
+        var extractor = TestHelpers.Create(adapter, new AzureOpenAIOptions
+        {
+            MaxImages = 5,
+            MaxImageSizeBytes = 5L * 1024 * 1024,
+            ImageDetailLevel = "auto",
+        });
+
+        await extractor.ExtractTraitsAsync(new[] { TestHelpers.Image("img_1") });
+
+        Assert.NotNull(adapter.LastRequest);
+        Assert.Equal("auto", adapter.LastRequest!.ImageDetailLevel);
     }
 }

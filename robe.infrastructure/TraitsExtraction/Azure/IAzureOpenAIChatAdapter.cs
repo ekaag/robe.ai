@@ -14,7 +14,8 @@ internal interface IAzureOpenAIChatAdapter
 internal sealed record ChatAdapterRequest(
     string SystemPrompt,
     string UserInstruction,
-    IReadOnlyList<ChatImageEntry> Images);
+    IReadOnlyList<ChatImageEntry> Images,
+    string ImageDetailLevel);
 
 internal sealed record ChatImageEntry(string ImageId, byte[] Content, string ContentType);
 
