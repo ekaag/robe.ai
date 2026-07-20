@@ -280,4 +280,5 @@ az cognitiveservices account deployment show --name rdev-foundry-resource --reso
 -------------- Clean up -------------------------
 
 az group delete --name my-foundry-rg --yes --no-wait
+az cognitiveservices account purge --location eastus --resource-group rg-robe-dev --name aoai-robe-dev 2>&1
 
